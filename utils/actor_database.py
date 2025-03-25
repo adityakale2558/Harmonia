@@ -109,6 +109,8 @@ class ActorDatabase:
             # Load the actors into memory
             self.actors["hollywood"] = default_data["hollywood"]
             self.actors["bollywood"] = default_data["bollywood"]
+            self.actors["apps"] = default_data["apps"]
+            self.actors["food"] = default_data["food"]
             
             logger.info("Created default actor database")
         
@@ -120,7 +122,7 @@ class ActorDatabase:
         Get the list of actors for a specific category.
         
         Args:
-            category: The category of actors ("hollywood" or "bollywood")
+            category: The category ("hollywood", "bollywood", "apps", or "food")
             
         Returns:
             A list of actor names
@@ -198,7 +200,9 @@ class ActorDatabase:
         try:
             data = {
                 "hollywood": self.actors["hollywood"],
-                "bollywood": self.actors["bollywood"]
+                "bollywood": self.actors["bollywood"],
+                "apps": self.actors["apps"],
+                "food": self.actors["food"]
             }
             
             async with aiofiles.open(self.data_file, 'w') as f:

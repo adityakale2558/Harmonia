@@ -10,7 +10,7 @@ GAME_TIMEOUT = 300  # 5 minutes of inactivity
 GUESS_LIMIT = 3     # Number of guess attempts per player
 
 # Actor game categories
-CATEGORIES = ["Hollywood", "Bollywood"]
+CATEGORIES = ["Hollywood", "Bollywood", "Apps", "Food"]
 
 # Music bot settings
 DEFAULT_VOLUME = 0.5  # 50%
