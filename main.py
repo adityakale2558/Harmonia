@@ -6,7 +6,7 @@ from discord.ext import commands
 import config
 from threading import Thread
 from app import app, update_bot_status
-from datetime import datetime
+from datetime import datetime, timedelta
 
 # Setup logging
 logging.basicConfig(level=logging.INFO, 
@@ -21,11 +21,17 @@ intents.guilds = True
 
 bot = commands.Bot(command_prefix=config.PREFIX, intents=intents, help_command=None)
 
+# Track when the bot started
+bot.start_time = None
+
 @bot.event
 async def on_ready():
     """Event triggered when the bot is ready and connected to Discord."""
     logger.info(f'Logged in as {bot.user.name} (ID: {bot.user.id})')
     logger.info(f'Connected to {len(bot.guilds)} servers')
+    
+    # Set the start time when the bot comes online
+    bot.start_time = datetime.now()
     
     # Load cogs
     await load_cogs()
@@ -87,6 +93,100 @@ async def on_command_error(ctx, error):
     logger.error(f'Command error in {ctx.command}: {error}')
     await ctx.send(f"❌ An error occurred: {str(error)}")
 
+@bot.command(name="status")
+async def status_command(ctx):
+    """Show detailed information about the bot's status."""
+    
+    # Create embed with bot info
+    embed = discord.Embed(
+        title="🤖 Bot Status",
+        description="Current status and statistics for the bot",
+        color=discord.Color.green()
+    )
+    
+    # Add bot info section
+    embed.add_field(
+        name="📊 General Info",
+        value=f"**Name**: {bot.user.name}\n"
+              f"**ID**: {bot.user.id}\n"
+              f"**Status**: 🟢 Online\n"
+              f"**Prefix**: {config.PREFIX}",
+        inline=True
+    )
+    
+    # Add server stats
+    total_users = sum(guild.member_count for guild in bot.guilds)
+    embed.add_field(
+        name="🌐 Server Stats",
+        value=f"**Servers**: {len(bot.guilds)}\n"
+              f"**Users**: {total_users}\n",
+        inline=True
+    )
+    
+    # Add uptime information
+    if bot.start_time:
+        current_time = datetime.now()
+        uptime = current_time - bot.start_time
+        
+        # Format uptime nicely
+        days = uptime.days
+        hours, remainder = divmod(uptime.seconds, 3600)
+        minutes, seconds = divmod(remainder, 60)
+        
+        uptime_formatted = []
+        if days > 0:
+            uptime_formatted.append(f"{days} day{'s' if days != 1 else ''}")
+        if hours > 0:
+            uptime_formatted.append(f"{hours} hour{'s' if hours != 1 else ''}")
+        if minutes > 0:
+            uptime_formatted.append(f"{minutes} minute{'s' if minutes != 1 else ''}")
+        if seconds > 0 or not uptime_formatted:
+            uptime_formatted.append(f"{seconds} second{'s' if seconds != 1 else ''}")
+        
+        uptime_str = ", ".join(uptime_formatted)
+        started_at = bot.start_time.strftime("%Y-%m-%d %H:%M:%S UTC")
+    else:
+        uptime_str = "Unknown"
+        started_at = "Unknown"
+    
+    embed.add_field(
+        name="⏱️ Uptime",
+        value=f"**Running for**: {uptime_str}\n**Started at**: {started_at}",
+        inline=False
+    )
+    
+    # Add ping/latency information
+    latency = round(bot.latency * 1000)
+    embed.add_field(
+        name="📡 Connection",
+        value=f"**Latency**: {latency}ms",
+        inline=True
+    )
+    
+    # Add game statistics
+    game_cog = bot.get_cog('ActorGame')
+    active_games = 0
+    if game_cog and hasattr(game_cog, 'active_games'):
+        active_games = len(game_cog.active_games)
+    
+    # Add music statistics
+    music_cog = bot.get_cog('MusicPlayer')
+    active_music_sessions = 0
+    if music_cog and hasattr(music_cog, 'music_queues'):
+        active_music_sessions = len(music_cog.music_queues)
+    
+    embed.add_field(
+        name="🎮 Activity",
+        value=f"**Active Games**: {active_games}\n"
+              f"**Music Sessions**: {active_music_sessions}",
+        inline=True
+    )
+    
+    # Set footer with timestamp
+    embed.set_footer(text=f"Requested by {ctx.author} • {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    
+    await ctx.send(embed=embed)
+
 @bot.command(name="help")
 async def help_command(ctx, command_name=None):
     """Display help information about available commands."""
@@ -103,6 +203,14 @@ async def help_command(ctx, command_name=None):
         embed.add_field(
             name="🎭 Guess It Game Commands",
             value=game_commands,
+            inline=False
+        )
+        
+        # Utility commands
+        utility_commands = "`status`, `ping`, `help`"
+        embed.add_field(
+            name="🔧 Utility Commands",
+            value=utility_commands,
             inline=False
         )
         
