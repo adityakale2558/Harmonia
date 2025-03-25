@@ -592,8 +592,8 @@ class MusicPlayer(commands.Cog):
         Display lyrics for the current song or a specified song.
         
         Usage:
-        !lyrics - Get lyrics for the current song
-        !lyrics <song name> - Get lyrics for a specific song
+        =lyrics - Get lyrics for the current song
+        =lyrics <song name> - Get lyrics for a specific song
         """
         queue = self.get_queue(ctx.guild.id)
         
