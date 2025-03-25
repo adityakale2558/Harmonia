@@ -89,7 +89,15 @@ class YTDLSource(discord.PCMVolumeTransformer):
         
         # Check if it's already a direct audio URL
         if song.url and (song.url.endswith('.mp3') or song.url.endswith('.m4a')):
-            return discord.FFmpegPCMAudio(song.url, **ffmpeg_options)
+            try:
+                return discord.FFmpegPCMAudio(song.url, **ffmpeg_options)
+            except discord.errors.ClientException as e:
+                if "ffmpeg was not found" in str(e):
+                    logger.error("FFmpeg was not found. Make sure ffmpeg is installed on the system.")
+                    raise Exception("Failed to stream audio: ffmpeg was not found. Bot admin needs to install ffmpeg.")
+                else:
+                    logger.error(f"Error creating FFmpeg audio: {e}")
+                    raise Exception(f"Failed to stream audio: {e}")
         
         # If it's not a direct URL, extract the audio URL
         try:
@@ -104,7 +112,15 @@ class YTDLSource(discord.PCMVolumeTransformer):
             if not song.thumbnail:
                 song.thumbnail = data.get('thumbnail')
             
-            return discord.FFmpegPCMAudio(song.url, **ffmpeg_options)
+            try:
+                return discord.FFmpegPCMAudio(song.url, **ffmpeg_options)
+            except discord.errors.ClientException as e:
+                if "ffmpeg was not found" in str(e):
+                    logger.error("FFmpeg was not found. Make sure ffmpeg is installed on the system.")
+                    raise Exception("Failed to stream audio: ffmpeg was not found. Bot admin needs to install ffmpeg.")
+                else:
+                    logger.error(f"Error creating FFmpeg audio: {e}")
+                    raise Exception(f"Failed to stream audio: {e}")
         except Exception as e:
             logger.error(f"Error streaming audio: {e}")
             raise Exception(f"Failed to stream audio: {e}")
@@ -274,8 +290,8 @@ class MusicPlayer(commands.Cog):
         Play a song from YouTube or Spotify.
         
         Usage:
-        !play <YouTube URL or search query>
-        !play <Spotify track/album/playlist URL>
+        =play <YouTube URL or search query>
+        =play <Spotify track/album/playlist URL>
         """
         if query is None:
             await ctx.send("❌ Please provide a song URL or search query.")
@@ -365,7 +381,7 @@ class MusicPlayer(commands.Cog):
         queue = self.get_queue(ctx.guild.id)
         
         if queue.is_empty():
-            await ctx.send("🎵 Queue is empty. Use `!play` to add songs!")
+            await ctx.send("🎵 Queue is empty. Use `=play` to add songs!")
             return
         
         # Get the next song from the queue
@@ -533,8 +549,8 @@ class MusicPlayer(commands.Cog):
         Change the volume of the music player.
         
         Usage:
-        !volume - Show current volume
-        !volume <1-100> - Set volume level
+        =volume - Show current volume
+        =volume <1-100> - Set volume level
         """
         queue = self.get_queue(ctx.guild.id)
         
