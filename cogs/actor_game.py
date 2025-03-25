@@ -85,14 +85,14 @@ class ActorGame(commands.Cog):
         
         # Check if a game is already running in this guild
         if guild_id in self.game_sessions:
-            await ctx.send("❌ A game is already running in this server. Use `!endgame` to end it first.")
+            await ctx.send("❌ A game is already running in this server. Use `=endgame` to end it first.")
             return
         
         # Validate category
         if category is None:
             # If no category is provided, list available categories
             categories_list = ", ".join(config.CATEGORIES)
-            await ctx.send(f"Please specify a category: `!startgame <category>`\nAvailable categories: {categories_list}")
+            await ctx.send(f"Please specify a category: `=startgame <category>`\nAvailable categories: {categories_list}")
             return
         
         category = category.capitalize()
@@ -120,17 +120,17 @@ class ActorGame(commands.Cog):
         embed = discord.Embed(
             title="🎭 Guess It Game",
             description=f"Game started with category: **{category}**\n\n"
-                       f"Other players can join with `!join`\n"
-                       f"When ready, the host can use `!assign` to assign actors to players.",
+                       f"Other players can join with `=join`\n"
+                       f"When ready, the host can use `=assign` to assign items to players.",
             color=discord.Color.green()
         )
         embed.add_field(name="Players", value=ctx.author.mention, inline=False)
         embed.add_field(name="How to Play", value=(
-            "1. Join the game with `!join`\n"
-            "2. The host will assign actors to everyone with `!assign`\n"
-            "3. You'll see everyone's actor name except your own\n"
-            "4. Ask questions to figure out your actor using `!question <your question>`\n"
-            "5. When you're ready to guess, use `!guess <actor name>`"
+            "1. Join the game with `=join`\n"
+            "2. The host will assign items to everyone with `=assign`\n"
+            "3. You'll see everyone's item except your own\n"
+            "4. Ask questions to figure out your item using `=question <your question>`\n"
+            "5. When you're ready to guess, use `=guess <item name>`"
         ), inline=False)
         
         await ctx.send(embed=embed)
@@ -138,7 +138,7 @@ class ActorGame(commands.Cog):
     
     @commands.command(name="join")
     async def join_game(self, ctx):
-        """Join an ongoing 'Guess the Actor' game."""
+        """Join an ongoing 'Guess It' game."""
         guild_id = ctx.guild.id
         
         # Check if a game is running in this guild
@@ -179,7 +179,7 @@ class ActorGame(commands.Cog):
         
         # Update the players list in an embed
         embed = discord.Embed(
-            title="🎭 Guess the Actor Game",
+            title="🎭 Guess It Game",
             description=f"Category: **{session.category}**\n\n"
                        f"Current players ({len(session.players)}/{config.MAX_PLAYERS}):",
             color=discord.Color.blue()
