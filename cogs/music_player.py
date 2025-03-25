@@ -40,8 +40,11 @@ ytdl_format_options = {
     'source_address': '0.0.0.0',  # Bind to ipv4
 }
 
-# Set the absolute path to ffmpeg
+# Set the absolute path to ffmpeg - this is critical for music playback
 FFMPEG_PATH = '/nix/store/3zc5jbvqzrn8zmva4fx5p0nh4yy03wk4-ffmpeg-6.1.1-bin/bin/ffmpeg'
+
+# Set ffmpeg in environment path to help discord.py find it automatically
+os.environ['PATH'] = f"/nix/store/3zc5jbvqzrn8zmva4fx5p0nh4yy03wk4-ffmpeg-6.1.1-bin/bin:{os.environ.get('PATH', '')}"
 
 ffmpeg_options = {
     'options': '-vn',
