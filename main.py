@@ -31,8 +31,8 @@ async def on_ready():
     await load_cogs()
     
     # Set custom status
-    activity = discord.Activity(type=discord.ActivityType.listening, 
-                               name=f"{config.PREFIX}help | Games & Music")
+    activity = discord.Activity(type=discord.ActivityType.playing, 
+                               name=f"{config.PREFIX}help | Actor Game")
     await bot.change_presence(activity=activity)
     
     # Update web dashboard status
@@ -54,7 +54,7 @@ async def load_cogs():
     """Load all cogs/extensions for the bot."""
     initial_extensions = [
         'cogs.actor_game',
-        'cogs.music_player'
+        # 'cogs.music_player'  # Disabled music player to focus on the actor game
     ]
     
     for extension in initial_extensions:
@@ -99,18 +99,17 @@ async def help_command(ctx, command_name=None):
         )
         
         # Actor Game commands
-        game_commands = "`startgame`, `join`, `question`, `guess`, `endgame`"
+        game_commands = "`startgame`, `join`, `question`, `guess`, `endgame`, `gamestatus`"
         embed.add_field(
             name="🎭 Actor Game Commands",
             value=game_commands,
             inline=False
         )
         
-        # Music commands
-        music_commands = "`joinvc`, `play`, `pause`, `resume`, `skip`, `queue`, `lyrics`, `volume`, `stop`"
+        # Bot information
         embed.add_field(
-            name="🎵 Music Commands",
-            value=music_commands,
+            name="ℹ️ Bot Information",
+            value="This bot allows you to play the 'Guess the Actor' game with friends.\nMusic functionality is currently disabled.",
             inline=False
         )
         
@@ -153,14 +152,6 @@ def start_flask(host='0.0.0.0', port=5000):
 if __name__ == "__main__":
     # Do not start Flask web server here - we're using the Start application workflow for that
     
-    # Setup ffmpeg for audio playback
-    try:
-        import setup_ffmpeg
-        setup_ffmpeg.setup_ffmpeg()
-        logger.info("FFmpeg setup completed successfully")
-    except Exception as e:
-        logger.warning(f"FFmpeg setup failed, music playback may not work: {e}")
-    
     # Get the token from environment variables
     token = os.getenv("DISCORD_TOKEN")
     if not token:
@@ -168,4 +159,5 @@ if __name__ == "__main__":
         exit(1)
     
     # Run the bot
+    logger.info("Starting Discord bot - Actor Game mode")
     bot.run(token)
