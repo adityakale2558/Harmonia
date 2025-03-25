@@ -103,32 +103,59 @@ class YTDLSource(discord.PCMVolumeTransformer):
         logger.debug(f"Starting stream_audio for song: {song.title}")
         ytdl = yt_dlp.YoutubeDL(ytdl_format_options)
         
-        # Double check the FFmpeg path
-        logger.debug(f"Using FFmpeg path: {FFMPEG_PATH}")
+        # Settings directly from setup_ffmpeg.py
+        ffmpeg_path = '/nix/store/3zc5jbvqzrn8zmva4fx5p0nh4yy03wk4-ffmpeg-6.1.1-bin/bin/ffmpeg'
+        
+        # Verify ffmpeg exists
+        if not os.path.exists(ffmpeg_path):
+            logger.error(f"FFmpeg not found at {ffmpeg_path}")
+            raise Exception("FFmpeg not found. Please check the installation.")
+            
+        logger.debug(f"Verified FFmpeg path: {ffmpeg_path}")
+        
+        # Define ffmpeg options (without executable since it's passed separately)
+        before_options = '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5'
+        options = '-vn'
         
         # Check if it's already a direct audio URL
         if song.url and (song.url.endswith('.mp3') or song.url.endswith('.m4a')):
             logger.debug(f"Direct audio URL detected: {song.url}")
             try:
                 logger.debug("Creating FFmpegPCMAudio with direct URL")
-                return discord.FFmpegPCMAudio(executable=FFMPEG_PATH, source=song.url, **ffmpeg_options)
-            except discord.errors.ClientException as e:
-                if "ffmpeg was not found" in str(e):
-                    logger.error("FFmpeg was not found. Make sure ffmpeg is installed on the system.")
-                    raise Exception("Failed to stream audio: ffmpeg was not found. Bot admin needs to install ffmpeg.")
-                else:
-                    logger.error(f"Error creating FFmpeg audio: {e}")
-                    raise Exception(f"Failed to stream audio: {e}")
+                return discord.FFmpegPCMAudio(
+                    source=song.url,
+                    executable=ffmpeg_path,
+                    before_options=before_options,
+                    options=options
+                )
+            except Exception as e:
+                logger.error(f"Error creating FFmpeg audio: {e}")
+                raise Exception(f"Failed to stream audio: {str(e)}")
         
         # If it's not a direct URL, extract the audio URL
         try:
             logger.debug(f"Extracting audio URL from webpage: {song.webpage_url}")
-            data = await asyncio.to_thread(lambda: ytdl.extract_info(song.webpage_url, download=False))
+            
+            if not song.webpage_url:
+                logger.error("No webpage URL provided")
+                raise Exception("No valid URL to extract audio from")
+                
+            # Extract info in a separate thread to not block
+            try:
+                data = await asyncio.to_thread(lambda: ytdl.extract_info(song.webpage_url, download=False))
+            except Exception as e:
+                logger.error(f"YT-DLP extraction error: {e}")
+                raise Exception(f"Could not process video: {str(e)}")
+                
             if 'entries' in data:
                 data = data['entries'][0]
             
             # Update song info if needed
-            song.url = data.get('url')
+            if not song.url:
+                song.url = data.get('url')
+                if not song.url:
+                    raise Exception("Could not extract audio URL from video")
+                    
             logger.debug(f"Extracted audio URL: {song.url}")
             
             if not song.duration:
@@ -137,18 +164,30 @@ class YTDLSource(discord.PCMVolumeTransformer):
                 song.thumbnail = data.get('thumbnail')
             
             try:
-                logger.debug("Creating FFmpegPCMAudio with extracted URL")
-                return discord.FFmpegPCMAudio(executable=FFMPEG_PATH, source=song.url, **ffmpeg_options)
-            except discord.errors.ClientException as e:
-                if "ffmpeg was not found" in str(e):
-                    logger.error("FFmpeg was not found. Make sure ffmpeg is installed on the system.")
-                    raise Exception("Failed to stream audio: ffmpeg was not found. Bot admin needs to install ffmpeg.")
+                logger.debug(f"Creating FFmpegPCMAudio with extracted URL and ffmpeg at {ffmpeg_path}")
+                
+                # Create audio player with explicit parameters rather than using **kwargs
+                return discord.FFmpegPCMAudio(
+                    source=song.url,
+                    executable=ffmpeg_path,
+                    before_options=before_options,
+                    options=options
+                )
+            except Exception as e:
+                logger.error(f"Error creating FFmpeg audio: {e}")
+                
+                # Add more detailed error message to help troubleshoot
+                error_details = str(e)
+                if "ffmpeg was not found" in error_details:
+                    raise Exception(f"FFmpeg not found. Path tried: {ffmpeg_path}")
+                elif "No such file" in error_details:
+                    raise Exception(f"FFmpeg file not found at: {ffmpeg_path}")
                 else:
-                    logger.error(f"Error creating FFmpeg audio: {e}")
-                    raise Exception(f"Failed to stream audio: {e}")
+                    raise Exception(f"Audio playback error: {error_details}")
+                    
         except Exception as e:
             logger.error(f"Error streaming audio: {e}")
-            raise Exception(f"Failed to stream audio: {e}")
+            raise Exception(f"Failed to stream audio: {str(e)}")
 
 class MusicPlayer(commands.Cog):
     """Cog for music player functionality."""
@@ -407,6 +446,12 @@ class MusicPlayer(commands.Cog):
     async def play_next_song(self, ctx):
         """Play the next song in the queue."""
         logger.debug("Starting play_next_song method")
+        
+        # Make sure voice client is still connected
+        if not ctx.voice_client or not ctx.voice_client.is_connected():
+            logger.warning("Voice client disconnected, cannot play next song")
+            return
+            
         queue = self.get_queue(ctx.guild.id)
         
         if queue.is_empty():
@@ -416,78 +461,152 @@ class MusicPlayer(commands.Cog):
         
         # Get the next song from the queue
         song = queue.get_next_song()
-        logger.debug(f"Got next song: {song.title if song else 'None'}")
+        if not song:
+            logger.warning("Failed to get next song from queue")
+            await ctx.send("❌ Failed to get the next song from queue.")
+            return
+            
+        logger.debug(f"Got next song: {song.title}")
         
         try:
             # Handle Spotify songs by searching YouTube
-            if song.is_spotify:
+            if hasattr(song, 'is_spotify') and song.is_spotify:
                 await ctx.send(f"🔍 Finding YouTube source for: {song.title}")
-                search_query = song.search_query
+                
+                if not hasattr(song, 'search_query') or not song.search_query:
+                    search_query = f"{song.title} audio"
+                    logger.debug(f"No search query available, using title: {search_query}")
+                else:
+                    search_query = song.search_query
+                    logger.debug(f"Using search query: {search_query}")
+                
                 # Try to find the song on YouTube
                 try:
                     youtube_song = await YTDLSource.create_source(search_query, loop=self.bot.loop)
                     # Update song with YouTube details
-                    song.url = youtube_song.url
-                    song.webpage_url = youtube_song.webpage_url
+                    if youtube_song:
+                        song.url = youtube_song.url
+                        song.webpage_url = youtube_song.webpage_url
+                        logger.debug(f"Found YouTube source: {song.url}")
+                    else:
+                        raise Exception("YouTube source returned None")
                 except Exception as e:
                     logger.error(f"Failed to find YouTube source for Spotify song: {e}")
                     await ctx.send(f"❌ Failed to find a YouTube source for: {song.title}")
-                    # Try to play the next song
+                    # Skip to the next song instead of recursively calling play_next_song
+                    queue.next_song() 
                     await self.play_next_song(ctx)
                     return
             
-            # Create the audio source
-            audio_source = await YTDLSource.stream_audio(song)
+            # Verify we have a URL to play
+            if not hasattr(song, 'url') or not song.url:
+                if hasattr(song, 'webpage_url') and song.webpage_url:
+                    logger.debug(f"No direct URL, using webpage URL: {song.webpage_url}")
+                else:
+                    logger.error("Song has no URL to play")
+                    await ctx.send(f"❌ No playable URL found for: {song.title}")
+                    queue.next_song()
+                    await self.play_next_song(ctx)
+                    return
             
+            # Create the audio source with detailed error handling
+            try:
+                logger.debug(f"Creating audio source for: {song.title}")
+                audio_source = await YTDLSource.stream_audio(song)
+                
+                if not audio_source:
+                    raise Exception("Failed to create audio source")
+                    
+            except Exception as e:
+                logger.error(f"Error creating audio source: {e}")
+                await ctx.send(f"❌ Error playing {song.title}: {str(e)}")
+                # Skip to next song
+                queue.next_song()
+                await self.play_next_song(ctx)
+                return
+            
+            # Verify voice client is still connected before playing
+            if not ctx.voice_client or not ctx.voice_client.is_connected():
+                logger.warning("Voice client disconnected while preparing song")
+                return
+                
             # Set the volume
-            volume_transformer = discord.PCMVolumeTransformer(audio_source, volume=queue.volume)
-            
-            # Play the song
-            ctx.voice_client.play(
-                volume_transformer,
-                after=lambda e: asyncio.run_coroutine_threadsafe(
-                    self.song_finished(ctx, e), self.bot.loop
+            try:
+                volume = queue.volume if hasattr(queue, 'volume') else 0.5
+                volume_transformer = discord.PCMVolumeTransformer(audio_source, volume=volume)
+                
+                # Play the song with robust error handling in the callback
+                ctx.voice_client.play(
+                    volume_transformer,
+                    after=lambda e: asyncio.run_coroutine_threadsafe(
+                        self.song_finished(ctx, e), self.bot.loop
+                    ).result()  # Added .result() to ensure errors are caught
                 )
-            )
-            
-            # Send now playing message
-            embed = discord.Embed(
-                title="🎵 Now Playing",
-                description=f"[{song.title}]({song.webpage_url})",
-                color=discord.Color.blue()
-            )
-            
-            if song.thumbnail:
-                embed.set_thumbnail(url=song.thumbnail)
-            
-            if song.duration:
-                minutes, seconds = divmod(song.duration, 60)
-                embed.add_field(name="Duration", value=f"{minutes}:{seconds:02d}", inline=True)
-            
-            embed.add_field(name="Uploader", value=song.uploader, inline=True)
-            
-            queue_length = len(queue.songs)
-            embed.set_footer(text=f"Songs in queue: {queue_length}")
-            
-            await ctx.send(embed=embed)
-            
+                
+                # Send now playing message
+                embed = discord.Embed(
+                    title="🎵 Now Playing",
+                    description=f"[{song.title}]({song.webpage_url if hasattr(song, 'webpage_url') else ''})",
+                    color=discord.Color.blue()
+                )
+                
+                if hasattr(song, 'thumbnail') and song.thumbnail:
+                    embed.set_thumbnail(url=song.thumbnail)
+                
+                if hasattr(song, 'duration') and song.duration:
+                    minutes, seconds = divmod(song.duration, 60)
+                    embed.add_field(name="Duration", value=f"{minutes}:{seconds:02d}", inline=True)
+                
+                uploader = song.uploader if hasattr(song, 'uploader') else "Unknown"
+                embed.add_field(name="Uploader", value=uploader, inline=True)
+                
+                queue_length = len(queue.songs) if hasattr(queue, 'songs') else 0
+                embed.set_footer(text=f"Songs in queue: {queue_length}")
+                
+                await ctx.send(embed=embed)
+                logger.info(f"Now playing: {song.title}")
+                
+            except Exception as e:
+                logger.error(f"Error starting playback: {e}")
+                await ctx.send(f"❌ Error starting playback: {str(e)}")
+                # Try next song
+                queue.next_song()
+                await self.play_next_song(ctx)
+                
         except Exception as e:
-            logger.error(f"Error playing next song: {e}")
-            await ctx.send(f"❌ Error playing the song: {str(e)}")
-            # Try to play the next song
+            logger.error(f"Unexpected error in play_next_song: {e}")
+            await ctx.send(f"❌ An unexpected error occurred: {str(e)}")
+            # Move to next song to avoid getting stuck
+            queue.next_song()
             await self.play_next_song(ctx)
     
     async def song_finished(self, ctx, error):
         """Called when a song finishes playing."""
-        if error:
-            logger.error(f"Player error: {error}")
-            await ctx.send(f"❌ Player error: {error}")
-        
-        queue = self.get_queue(ctx.guild.id)
-        
-        # If there are more songs in the queue, play the next one
-        if not queue.is_empty():
-            await self.play_next_song(ctx)
+        try:
+            if error:
+                logger.error(f"Player error: {error}")
+                await ctx.send(f"❌ Player error: {error}")
+            
+            # Make sure the guild still exists and we're still connected
+            if not ctx.guild or not ctx.voice_client or not ctx.voice_client.is_connected():
+                logger.warning("Cannot continue playback - disconnected from voice channel")
+                return
+                
+            queue = self.get_queue(ctx.guild.id)
+            
+            # If there are more songs in the queue, play the next one
+            if not queue.is_empty():
+                await self.play_next_song(ctx)
+            else:
+                await ctx.send("🎵 Queue finished. Add more songs with `=play`!")
+        except Exception as e:
+            logger.error(f"Error in song_finished callback: {e}")
+            try:
+                await ctx.send(f"❌ Error handling song completion: {str(e)}")
+            except:
+                # If we can't send a message, the channel might be deleted or bot lacks permissions
+                logger.error("Could not send error message to channel")
+                pass
     
     @commands.command(name="pause")
     async def pause(self, ctx):
