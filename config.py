@@ -1,7 +1,7 @@
 import os
 
 # Bot configuration
-PREFIX = os.getenv("COMMAND_PREFIX", "!")
+PREFIX = os.getenv("COMMAND_PREFIX", "=")
 
 # Game settings
 MIN_PLAYERS = 2
