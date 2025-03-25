@@ -166,8 +166,8 @@ async def status_command(ctx):
     # Add game statistics
     game_cog = bot.get_cog('ActorGame')
     active_games = 0
-    if game_cog and hasattr(game_cog, 'active_games'):
-        active_games = len(game_cog.active_games)
+    if game_cog and hasattr(game_cog, 'game_sessions'):
+        active_games = len(game_cog.game_sessions)
     
     # Add music statistics
     music_cog = bot.get_cog('MusicPlayer')
