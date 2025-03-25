@@ -14,7 +14,7 @@ class ActorDatabase:
     """
     
     def __init__(self):
-        self.actors = {"hollywood": [], "bollywood": []}
+        self.actors = {"hollywood": [], "bollywood": [], "apps": [], "food": []}
         self.data_file = "data/actors.json"
     
     async def load_actors(self) -> None:
@@ -45,9 +45,13 @@ class ActorDatabase:
                 # Load actors by category
                 self.actors["hollywood"] = data.get("hollywood", [])
                 self.actors["bollywood"] = data.get("bollywood", [])
+                self.actors["apps"] = data.get("apps", [])
+                self.actors["food"] = data.get("food", [])
                 
-                logger.info(f"Loaded {len(self.actors['hollywood'])} Hollywood actors and "
-                          f"{len(self.actors['bollywood'])} Bollywood actors")
+                logger.info(f"Loaded {len(self.actors['hollywood'])} Hollywood actors, "
+                          f"{len(self.actors['bollywood'])} Bollywood actors, "
+                          f"{len(self.actors['apps'])} Apps, and "
+                          f"{len(self.actors['food'])} Food items")
         
         except Exception as e:
             logger.error(f"Error loading actor database: {e}")
@@ -75,6 +79,22 @@ class ActorDatabase:
                 "Vidya Balan", "Sanjay Dutt", "Sonam Kapoor", "John Abraham",
                 "Shraddha Kapoor", "Irrfan Khan", "Kangana Ranaut", "Anil Kapoor",
                 "Tabu", "Nawazuddin Siddiqui"
+            ],
+            "apps": [
+                "Instagram", "Facebook", "WhatsApp", "TikTok", "YouTube", 
+                "Twitter", "Snapchat", "Netflix", "Spotify", "Uber",
+                "Gmail", "Google Maps", "Amazon", "Pinterest", "Zoom",
+                "Discord", "Slack", "Microsoft Teams", "Telegram", "Reddit",
+                "LinkedIn", "Twitch", "Hulu", "Disney+", "Duolingo",
+                "Candy Crush", "Minecraft", "Fortnite", "Roblox", "Among Us"
+            ],
+            "food": [
+                "Pizza", "Hamburger", "Sushi", "Chocolate", "Ice Cream",
+                "Pasta", "Taco", "Curry", "Fried Chicken", "Pancake",
+                "Donut", "French Fries", "Sandwich", "Noodles", "Steak",
+                "Salad", "Burrito", "Croissant", "Macaroni and Cheese", "Cupcake",
+                "Ramen", "Lasagna", "Cheesecake", "Waffles", "Brownies",
+                "Pho", "Popcorn", "Nachos", "Barbeque Ribs", "Butter Chicken"
             ]
         }
         
