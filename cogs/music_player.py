@@ -25,23 +25,28 @@ from utils.lyrics_fetcher import fetch_lyrics
 
 logger = logging.getLogger('discord_bot.music_player')
 
-# YT-DLP configuration
+# YT-DLP configuration - simplified for memory-constrained environments but with more compatible format
 ytdl_format_options = {
-    'format': 'bestaudio/best',
-    'outtmpl': '%(extractor)s-%(id)s-%(title)s.%(ext)s',
-    'restrictfilenames': True,
+    'format': 'bestaudio[filesize<3M]/bestaudio/worst', # Try small audio files first, then fallback
     'noplaylist': True,
     'nocheckcertificate': True,
     'ignoreerrors': False,
-    'logtostderr': False,
     'quiet': True,
     'no_warnings': True,
     'default_search': 'auto',
-    'source_address': '0.0.0.0',  # Bind to ipv4
+    'source_address': '0.0.0.0',
+    'extract_flat': False # Needed for proper format selection
 }
 
 # Set the absolute path to ffmpeg - this is critical for music playback
 FFMPEG_PATH = '/nix/store/3zc5jbvqzrn8zmva4fx5p0nh4yy03wk4-ffmpeg-6.1.1-bin/bin/ffmpeg'
+
+# Function to get memory-efficient ffmpeg options
+def get_ffmpeg_options():
+    return {
+        'before_options': '-nostdin -reconnect 1 -reconnect_streamed 1',
+        'options': '-vn -bufsize 1024k -ar 44100 -ac 1' # Mono audio, lower quality, smaller buffer
+    }
 
 # Set ffmpeg in environment path to help discord.py find it automatically
 os.environ['PATH'] = f"/nix/store/3zc5jbvqzrn8zmva4fx5p0nh4yy03wk4-ffmpeg-6.1.1-bin/bin:{os.environ.get('PATH', '')}"
@@ -99,138 +104,145 @@ class YTDLSource(discord.PCMVolumeTransformer):
     
     @staticmethod
     async def stream_audio(song: Song):
-        """Creates an FFmpeg audio source for streaming."""
-        logger.debug(f"Starting stream_audio for song: {song.title}")
+        """Creates a lightweight FFmpeg audio source optimized for memory-constrained environments."""
+        logger.debug(f"Starting ultra-lightweight stream for: {song.title}")
         
-        # Simplified YT-DLP options focused on streaming
-        simplified_ytdl_options = {
-            'format': 'bestaudio/best',
+        # Super lightweight options - absolute minimum memory usage but compatibility focused
+        lightweight_ytdl_options = {
+            'format': 'bestaudio[filesize<2M]/bestaudio[acodec=opus]/bestaudio',  # Small files first, then good compatibility
             'noplaylist': True,
             'nocheckcertificate': True,
-            'ignoreerrors': False,
             'quiet': True,
-            'no_warnings': True,
-            'default_search': 'auto',
-            'source_address': '0.0.0.0',
-            'socket_timeout': 30,  # More generous timeout
-            'extractor_retries': 5  # More retries
+            'extract_flat': False,   # Need full extraction for format selection
+            'skip_download': True,   # Make sure we're not downloading
+            'youtube_include_dash_manifest': False  # Skip DASH manifest parsing
         }
         
-        ytdl = yt_dlp.YoutubeDL(simplified_ytdl_options)
+        ytdl = yt_dlp.YoutubeDL(lightweight_ytdl_options)
         
-        # Use reliable method to get FFmpeg path
-        try:
-            # Get from shutil first
-            import shutil
-            ffmpeg_path = shutil.which('ffmpeg')
-            
-            # If not found, try specific path for Replit
-            if not ffmpeg_path:
-                replit_ffmpeg = '/nix/store/3zc5jbvqzrn8zmva4fx5p0nh4yy03wk4-ffmpeg-6.1.1-bin/bin/ffmpeg'
-                if os.path.exists(replit_ffmpeg):
-                    ffmpeg_path = replit_ffmpeg
-                else:
-                    # Try ~/.local/bin
-                    local_ffmpeg = os.path.expanduser('~/.local/bin/ffmpeg')
-                    if os.path.exists(local_ffmpeg):
-                        ffmpeg_path = local_ffmpeg
-            
-            # Double check and log the path
-            if ffmpeg_path:
-                logger.info(f"Found FFmpeg at: {ffmpeg_path}")
-            else:
-                logger.warning("FFmpeg not found in standard locations, will use default")
-                ffmpeg_path = 'ffmpeg'  # Use system default as last resort
-                
-        except Exception as e:
-            logger.error(f"Error finding FFmpeg: {e}")
-            ffmpeg_path = 'ffmpeg'  # Default to system path
-            
-        # Simplified FFmpeg options for more reliable streaming
-        before_options = '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5'
-        options = '-vn'  # Just extract audio, minimal options for compatibility
+        # Keep ffmpeg path detection simple
+        ffmpeg_path = FFMPEG_PATH
+        logger.debug(f"Using ffmpeg at: {ffmpeg_path}")
         
-        # First, try direct extraction from the URL/search without complex format selection
+        # Get our ultra-efficient ffmpeg options 
+        ffmpeg_opts = get_ffmpeg_options()
+        
+        # Simple URL determination logic - use any available URL or search
         url_to_extract = None
-        
-        # Determine what URL to use
-        if hasattr(song, 'webpage_url') and song.webpage_url:
-            url_to_extract = song.webpage_url
-            logger.debug(f"Using webpage_url: {url_to_extract}")
-        elif hasattr(song, 'url') and song.url:
+        if song.url:
             url_to_extract = song.url
-            logger.debug(f"Using direct url: {url_to_extract}")
+        elif song.webpage_url:
+            url_to_extract = song.webpage_url
         else:
-            # Last resort, try to construct a YouTube search
             url_to_extract = f"ytsearch:{song.title}"
-            logger.debug(f"Using title search: {url_to_extract}")
+            
+        logger.debug(f"Lightweight extraction from: {url_to_extract}")
             
         try:
-            # Extract info directly with simpler approach
-            logger.debug(f"Extracting audio info from: {url_to_extract}")
-            
-            # Use run_in_executor for better performance
+            # Simplified extraction
             loop = asyncio.get_event_loop()
-            extract_func = lambda: ytdl.extract_info(url_to_extract, download=False)
             
-            # Wrap in try-except for better error handling
-            try:
-                data = await loop.run_in_executor(None, extract_func)
-            except Exception as e:
-                logger.error(f"Error in initial extraction: {e}")
-                # Try one more time with a simpler approach
-                simplified_ytdl_options['format'] = 'worst'  # Use lowest quality - more reliable
-                ytdl = yt_dlp.YoutubeDL(simplified_ytdl_options)
-                data = await loop.run_in_executor(None, extract_func)
+            # Simplified extraction function - more reliability focused
+            async def get_direct_url():
+                try:
+                    # First, check for direct audio URLs
+                    if song.url and any(song.url.endswith(ext) for ext in ['.mp3', '.m4a', '.ogg', '.wav']):
+                        logger.debug(f"Using direct audio URL: {song.url}")
+                        return song.url, None
+                    
+                    # For search queries, just do a simple YouTube search
+                    if 'ytsearch:' in url_to_extract:
+                        logger.debug("Performing YouTube search with simple approach")
+                        # Simple extraction with default format
+                        info = await loop.run_in_executor(None, 
+                                lambda: ytdl.extract_info(url_to_extract, download=False))
+                        
+                        if info and info.get('entries') and len(info['entries']) > 0:
+                            entry = info['entries'][0]
+                            # Make sure we have a URL
+                            if entry.get('url'):
+                                return entry.get('url'), entry
+                    
+                    # For all other URLs, direct extraction
+                    logger.debug("Using direct extraction with best audio format")
+                    info = await loop.run_in_executor(None, 
+                            lambda: ytdl.extract_info(url_to_extract, download=False))
+                    
+                    # Handle playlist results
+                    if info and info.get('entries') and len(info['entries']) > 0:
+                        info = info['entries'][0]
+                    
+                    # Return the URL and metadata
+                    if info and info.get('url'):
+                        return info.get('url'), info
+                    else:
+                        logger.error("No URL found in extracted info")
+                        return None, None
+                        
+                except Exception as e:
+                    logger.error(f"Error in URL extraction: {e}")
+                    # Try with simpler format for compatibility
+                    try:
+                        lightweight_ytdl_options['format'] = 'worstaudio/worst'
+                        ytdl = yt_dlp.YoutubeDL(lightweight_ytdl_options)
+                        
+                        info = await loop.run_in_executor(None, 
+                                lambda: ytdl.extract_info(url_to_extract, download=False))
+                                
+                        if info and info.get('entries') and len(info['entries']) > 0:
+                            info = info['entries'][0]
+                            
+                        if info and info.get('url'):
+                            return info.get('url'), info
+                    except Exception as fallback_error:
+                        logger.error(f"Fallback extraction also failed: {fallback_error}")
+                    
+                    return None, None
             
-            # Handle playlist case (common with ytsearch)
-            if 'entries' in data:
-                if not data['entries']:
-                    raise Exception("No results found")
-                data = data['entries'][0]  # Take first result
-                
-            # Get direct URL to stream
-            stream_url = data.get('url')
+            # Get URL and info
+            stream_url, info = await get_direct_url()
+            
             if not stream_url:
-                raise Exception("No playable URL found in the extracted data")
-            
-            # Update song metadata if possible
-            if not song.duration:
-                song.duration = data.get('duration')
-            if not song.thumbnail:
-                song.thumbnail = data.get('thumbnail')
-            if not song.webpage_url and data.get('webpage_url'):
-                song.webpage_url = data.get('webpage_url')
+                raise Exception("Could not find a playable audio stream")
                 
-            # Create audio source with simplified parameters
-            logger.debug(f"Creating FFmpegPCMAudio with URL: {stream_url[:30]}...")
+            # Update metadata if we have it
+            if info:
+                if not song.duration and info.get('duration'):
+                    song.duration = info.get('duration')
+                if not song.thumbnail and info.get('thumbnail'):
+                    song.thumbnail = info.get('thumbnail')
+                if not song.webpage_url and info.get('webpage_url'):
+                    song.webpage_url = info.get('webpage_url')
             
+            # Create the most efficient audio source possible
             audio_source = discord.FFmpegPCMAudio(
                 source=stream_url,
                 executable=ffmpeg_path,
-                before_options=before_options,
-                options=options
+                before_options=ffmpeg_opts['before_options'],
+                options=ffmpeg_opts['options']
             )
             
             return audio_source
             
         except Exception as e:
             error_msg = str(e)
-            logger.error(f"Failed to extract audio: {error_msg}")
+            logger.error(f"Audio extraction failed: {error_msg}")
             
-            # More user-friendly error message
-            if "ffmpeg was not found" in error_msg:
-                raise Exception("FFmpeg was not found. Please check the bot configuration.")
-            elif "No such file" in error_msg:
-                raise Exception("FFmpeg executable not found at the specified path.")
-            elif "HTTP Error 403" in error_msg:
-                raise Exception("Access denied by the server. Try a different video or search query.")
-            elif "HTTP Error 429" in error_msg:
-                raise Exception("Too many requests to the server. Please try again later.")
-            elif "socket.timeout" in error_msg or "Read timed out" in error_msg:
-                raise Exception("Connection timed out. Please try again with a different video.")
+            # Make a more user-friendly error message
+            if "HTTP Error 429" in error_msg:
+                raise Exception("YouTube rate limited us. Please try again later.")
+            elif "Video unavailable" in error_msg:
+                raise Exception("This video is unavailable or restricted.")
+            elif "Requested format is not available" in error_msg:
+                raise Exception("Could not find a compatible audio format. Try another song.")
+            elif "exceeded" in error_msg.lower() and "memory" in error_msg.lower():
+                raise Exception("Memory limit exceeded. Try a shorter or less complex song.")
+            elif "ffmpeg" in error_msg.lower():
+                raise Exception("Error processing audio. Try another song or format.")
             else:
-                raise Exception(f"Could not play audio: {error_msg}")
+                # Log the full error but give a simple message to the user
+                logger.error(f"Detailed error: {error_msg}")
+                raise Exception("Could not play this audio. Try another song.")
 
 class MusicPlayer(commands.Cog):
     """Cog for music player functionality."""
