@@ -1,5 +1,5 @@
 {
-    "Hollywood": [
+    "hollywood": [
         "Tom Hanks",
         "Leonardo DiCaprio",
         "Meryl Streep",
@@ -41,7 +41,7 @@
         "Jake Gyllenhaal",
         "Idris Elba"
     ],
-    "Bollywood": [
+    "bollywood": [
         "Shah Rukh Khan",
         "Amitabh Bachchan",
         "Deepika Padukone",
@@ -82,5 +82,21 @@
         "Kangana Ranaut",
         "Vicky Kaushal",
         "Nargis Fakhri"
+    ],
+    "apps": [
+        "Instagram", "Facebook", "WhatsApp", "TikTok", "YouTube", 
+        "Twitter", "Snapchat", "Netflix", "Spotify", "Uber",
+        "Gmail", "Google Maps", "Amazon", "Pinterest", "Zoom",
+        "Discord", "Slack", "Microsoft Teams", "Telegram", "Reddit",
+        "LinkedIn", "Twitch", "Hulu", "Disney+", "Duolingo",
+        "Candy Crush", "Minecraft", "Fortnite", "Roblox", "Among Us"
+    ],
+    "food": [
+        "Pizza", "Hamburger", "Sushi", "Chocolate", "Ice Cream",
+        "Pasta", "Taco", "Curry", "Fried Chicken", "Pancake",
+        "Donut", "French Fries", "Sandwich", "Noodles", "Steak",
+        "Salad", "Burrito", "Croissant", "Macaroni and Cheese", "Cupcake",
+        "Ramen", "Lasagna", "Cheesecake", "Waffles", "Brownies",
+        "Pho", "Popcorn", "Nachos", "Barbeque Ribs", "Butter Chicken"
     ]
 }

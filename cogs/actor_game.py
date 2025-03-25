@@ -95,8 +95,12 @@ class ActorGame(commands.Cog):
             await ctx.send(f"Please specify a category: `=startgame <category>`\nAvailable categories: {categories_list}")
             return
         
-        category = category.capitalize()
-        if category not in config.CATEGORIES:
+        # Check if the provided category matches any of the allowed categories (case insensitive)
+        for allowed_category in config.CATEGORIES:
+            if category.lower() == allowed_category.lower():
+                category = allowed_category
+                break
+        else:  # This else belongs to the for loop, executes if no break occurred
             categories_list = ", ".join(config.CATEGORIES)
             await ctx.send(f"❌ Invalid category. Available categories: {categories_list}")
             return
@@ -217,8 +221,18 @@ class ActorGame(commands.Cog):
             await ctx.send(f"❌ Need at least {config.MIN_PLAYERS} players to start. Currently: {len(session.players)}.")
             return
         
-        # Get actors for the selected category
-        category_actors = self.actors.get(session.category, [])
+        # Get actors for the selected category (case-insensitive)
+        category_key = None
+        for key in self.actors.keys():
+            if key.lower() == session.category.lower():
+                category_key = key
+                break
+        
+        if category_key:
+            category_actors = self.actors[category_key]
+        else:
+            category_actors = []
+        
         if not category_actors:
             await ctx.send(f"❌ No actors found for category '{session.category}'.")
             return
