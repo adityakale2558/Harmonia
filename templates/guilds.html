@@ -1,0 +1,83 @@
+{% extends "layout.html" %}
+
+{% block title %}Servers - Harmonia Discord Bot{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-md-12">
+        <div class="card border-0 shadow">
+            <div class="card-header bg-dark">
+                <h5 class="card-title mb-0">
+                    <i class="fas fa-server me-2"></i> 
+                    Connected Servers ({{ bot_status.guild_count }})
+                </h5>
+            </div>
+            <div class="card-body">
+                {% if bot_status.guilds %}
+                    <div class="row">
+                        {% for guild in bot_status.guilds %}
+                        <div class="col-md-3 mb-4">
+                            <div class="card h-100">
+                                <div class="card-body text-center">
+                                    <img src="{{ guild.icon_url or 'https://cdn.discordapp.com/embed/avatars/0.png' }}" alt="{{ guild.name }}" class="server-icon mb-3">
+                                    <h5 class="card-title">{{ guild.name }}</h5>
+                                    <p class="text-muted">{{ guild.member_count }} members</p>
+                                    <div class="d-grid">
+                                        <a class="btn btn-sm btn-outline-primary" data-bs-toggle="collapse" href="#guildDetails{{ guild.id }}" role="button" aria-expanded="false">
+                                            <i class="fas fa-info-circle me-1"></i> Details
+                                        </a>
+                                    </div>
+                                </div>
+                                <div class="collapse" id="guildDetails{{ guild.id }}">
+                                    <div class="card-footer bg-dark">
+                                        <ul class="list-group list-group-flush">
+                                            <li class="list-group-item d-flex justify-content-between">
+                                                <span>Server ID</span>
+                                                <span class="badge bg-secondary">{{ guild.id }}</span>
+                                            </li>
+                                            <li class="list-group-item d-flex justify-content-between">
+                                                <span>Members</span>
+                                                <span class="badge bg-primary">{{ guild.member_count }}</span>
+                                            </li>
+                                        </ul>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                {% else %}
+                    <div class="alert alert-info text-center" role="alert">
+                        <i class="fas fa-info-circle me-2"></i>
+                        The bot is not connected to any servers yet.
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-6 offset-md-3">
+        <div class="card border-0 shadow">
+            <div class="card-header bg-dark">
+                <h5 class="card-title mb-0">
+                    <i class="fas fa-link me-2"></i> 
+                    Invite the Bot
+                </h5>
+            </div>
+            <div class="card-body text-center">
+                <p>Want to add this bot to your own Discord server? Use the invitation link below:</p>
+                <div class="d-grid gap-2 col-8 mx-auto">
+                    <a href="https://discord.com/api/oauth2/authorize?client_id={{ bot_status.id }}&permissions=3196928&scope=bot" target="_blank" class="btn btn-lg bg-discord text-white">
+                        <i class="fab fa-discord me-2"></i> Add to Server
+                    </a>
+                </div>
+                <div class="mt-3">
+                    <small class="text-muted">Note: You need "Manage Server" permission in the Discord server to add the bot.</small>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
