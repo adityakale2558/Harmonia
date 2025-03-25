@@ -153,6 +153,14 @@ def start_flask(host='0.0.0.0', port=5000):
 if __name__ == "__main__":
     # Do not start Flask web server here - we're using the Start application workflow for that
     
+    # Setup ffmpeg for audio playback
+    try:
+        import setup_ffmpeg
+        setup_ffmpeg.setup_ffmpeg()
+        logger.info("FFmpeg setup completed successfully")
+    except Exception as e:
+        logger.warning(f"FFmpeg setup failed, music playback may not work: {e}")
+    
     # Get the token from environment variables
     token = os.getenv("DISCORD_TOKEN")
     if not token:
