@@ -79,7 +79,7 @@ class ActorGame(commands.Cog):
         Start a new 'Guess the Actor' game.
         
         Usage: !startgame [category]
-        Available categories: Hollywood, Bollywood
+        Available categories: Hollywood, Bollywood, Apps, Food
         """
         guild_id = ctx.guild.id
         
