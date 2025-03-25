@@ -2,6 +2,14 @@ import discord
 from discord.ext import commands
 import asyncio
 import logging
+import sys
+
+# Configure more detailed logging
+logging.basicConfig(
+    level=logging.DEBUG,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[logging.StreamHandler(sys.stdout)]
+)
 import os
 import re
 import aiohttp
@@ -32,9 +40,13 @@ ytdl_format_options = {
     'source_address': '0.0.0.0',  # Bind to ipv4
 }
 
+# Set the absolute path to ffmpeg
+FFMPEG_PATH = '/nix/store/3zc5jbvqzrn8zmva4fx5p0nh4yy03wk4-ffmpeg-6.1.1-bin/bin/ffmpeg'
+
 ffmpeg_options = {
     'options': '-vn',
     'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5',
+    'executable': FFMPEG_PATH,  # Use the explicit path
 }
 
 class YTDLSource(discord.PCMVolumeTransformer):
@@ -85,12 +97,18 @@ class YTDLSource(discord.PCMVolumeTransformer):
     @staticmethod
     async def stream_audio(song: Song):
         """Creates an FFmpeg audio source for streaming."""
+        logger.debug(f"Starting stream_audio for song: {song.title}")
         ytdl = yt_dlp.YoutubeDL(ytdl_format_options)
+        
+        # Double check the FFmpeg path
+        logger.debug(f"Using FFmpeg path: {FFMPEG_PATH}")
         
         # Check if it's already a direct audio URL
         if song.url and (song.url.endswith('.mp3') or song.url.endswith('.m4a')):
+            logger.debug(f"Direct audio URL detected: {song.url}")
             try:
-                return discord.FFmpegPCMAudio(song.url, **ffmpeg_options)
+                logger.debug("Creating FFmpegPCMAudio with direct URL")
+                return discord.FFmpegPCMAudio(executable=FFMPEG_PATH, source=song.url, **ffmpeg_options)
             except discord.errors.ClientException as e:
                 if "ffmpeg was not found" in str(e):
                     logger.error("FFmpeg was not found. Make sure ffmpeg is installed on the system.")
@@ -101,19 +119,23 @@ class YTDLSource(discord.PCMVolumeTransformer):
         
         # If it's not a direct URL, extract the audio URL
         try:
+            logger.debug(f"Extracting audio URL from webpage: {song.webpage_url}")
             data = await asyncio.to_thread(lambda: ytdl.extract_info(song.webpage_url, download=False))
             if 'entries' in data:
                 data = data['entries'][0]
             
             # Update song info if needed
             song.url = data.get('url')
+            logger.debug(f"Extracted audio URL: {song.url}")
+            
             if not song.duration:
                 song.duration = data.get('duration')
             if not song.thumbnail:
                 song.thumbnail = data.get('thumbnail')
             
             try:
-                return discord.FFmpegPCMAudio(song.url, **ffmpeg_options)
+                logger.debug("Creating FFmpegPCMAudio with extracted URL")
+                return discord.FFmpegPCMAudio(executable=FFMPEG_PATH, source=song.url, **ffmpeg_options)
             except discord.errors.ClientException as e:
                 if "ffmpeg was not found" in str(e):
                     logger.error("FFmpeg was not found. Make sure ffmpeg is installed on the system.")
@@ -378,14 +400,17 @@ class MusicPlayer(commands.Cog):
     
     async def play_next_song(self, ctx):
         """Play the next song in the queue."""
+        logger.debug("Starting play_next_song method")
         queue = self.get_queue(ctx.guild.id)
         
         if queue.is_empty():
+            logger.debug("Queue is empty")
             await ctx.send("🎵 Queue is empty. Use `=play` to add songs!")
             return
         
         # Get the next song from the queue
         song = queue.get_next_song()
+        logger.debug(f"Got next song: {song.title if song else 'None'}")
         
         try:
             # Handle Spotify songs by searching YouTube
