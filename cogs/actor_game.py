@@ -367,7 +367,17 @@ class ActorGame(commands.Cog):
         ephemeral_embed.set_footer(text="Only you can see this message. Others will see your question without the actor name.")
         
         # Send ephemeral message that only the command author can see
-        await ctx.send(embed=ephemeral_embed, ephemeral=True)
+        try:
+            # For newer versions of discord.py that support ephemeral messages
+            await ctx.send(embed=ephemeral_embed, ephemeral=True)
+        except TypeError:
+            # For older versions where ephemeral is not supported directly in ctx.send
+            # Use a private DM instead
+            try:
+                await ctx.author.send(embed=ephemeral_embed)
+            except discord.Forbidden:
+                # If DMs are disabled
+                await ctx.send("⚠️ I couldn't send you a DM with your actor information. Please enable DMs from server members.")
         
         logger.info(f"Player {ctx.author.id} asked a question in game in guild {guild_id}")
     
