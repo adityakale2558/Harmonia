@@ -32,7 +32,7 @@ async def on_ready():
     
     # Set custom status
     activity = discord.Activity(type=discord.ActivityType.playing, 
-                               name=f"{config.PREFIX}help | Actor Game")
+                               name=f"{config.PREFIX}help | Guess It")
     await bot.change_presence(activity=activity)
     
     # Update web dashboard status
@@ -98,10 +98,10 @@ async def help_command(ctx, command_name=None):
             color=discord.Color.blue()
         )
         
-        # Actor Game commands
+        # Guess It game commands
         game_commands = "`startgame`, `join`, `question`, `guess`, `endgame`, `gamestatus`"
         embed.add_field(
-            name="🎭 Actor Game Commands",
+            name="🎭 Guess It Game Commands",
             value=game_commands,
             inline=False
         )
@@ -109,7 +109,7 @@ async def help_command(ctx, command_name=None):
         # Bot information
         embed.add_field(
             name="ℹ️ Bot Information",
-            value="This bot allows you to play the 'Guess the Actor' game with friends.\nMusic functionality is currently disabled.",
+            value="This bot allows you to play the 'Guess It' game with friends.\nMusic functionality is currently disabled.",
             inline=False
         )
         
@@ -159,5 +159,5 @@ if __name__ == "__main__":
         exit(1)
     
     # Run the bot
-    logger.info("Starting Discord bot - Actor Game mode")
+    logger.info("Starting Discord bot - Guess It mode")
     bot.run(token)

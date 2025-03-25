@@ -68,7 +68,7 @@ async def info(ctx):
         color=discord.Color.blue()
     )
     
-    embed.add_field(name="Features", value="• Guess the Actor game\n• Music playback from YouTube and Spotify", inline=False)
+    embed.add_field(name="Features", value="• Guess It game\n• Music playback from YouTube and Spotify (disabled)", inline=False)
     embed.add_field(name="Prefix", value=f"`{Config.PREFIX}` or mention the bot", inline=False)
     embed.add_field(name="Commands", value=f"Use `{Config.PREFIX}help` to see all commands", inline=False)
     
