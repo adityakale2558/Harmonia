@@ -171,12 +171,15 @@ class MusicPlayer(commands.Cog):
                 )
                 self.spotify = spotipy.Spotify(auth_manager=auth_manager)
                 logger.info("Spotify client initialized successfully")
+                return True
             except Exception as e:
                 logger.error(f"Failed to initialize Spotify client: {e}")
                 self.spotify = None
+                return False
         else:
             logger.warning("Spotify credentials not found, Spotify functionality will be limited")
             self.spotify = None
+            return False
     
     def get_queue(self, guild_id: int) -> MusicQueue:
         """Get or create a MusicQueue for a guild."""
