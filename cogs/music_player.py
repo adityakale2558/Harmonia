@@ -578,10 +578,16 @@ class MusicPlayer(commands.Cog):
             # Create the audio source with detailed error handling
             try:
                 logger.debug(f"Creating audio source for: {song.title}")
-                audio_source = await YTDLSource.stream_audio(song)
-                
-                if not audio_source:
-                    raise Exception("Failed to create audio source")
+                # Make explicitly sure we catch all exceptions when creating audio
+                try:
+                    audio_source = await YTDLSource.stream_audio(song)
+                    
+                    if not audio_source:
+                        raise Exception("Failed to create audio source - returned None")
+                except Exception as audio_err:
+                    logger.error(f"Stream audio error: {audio_err}")
+                    # Add more detailed error info for debugging
+                    raise Exception(f"Could not play audio: {str(audio_err)}")
                     
             except Exception as e:
                 logger.error(f"Error creating audio source: {e}")
