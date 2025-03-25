@@ -282,26 +282,10 @@ class MusicPlayer(commands.Cog):
     
     def setup_spotify(self):
         """Set up Spotify client if credentials are available."""
-        client_id = config.SPOTIFY_CLIENT_ID
-        client_secret = config.SPOTIFY_CLIENT_SECRET
-        
-        if client_id and client_secret:
-            try:
-                auth_manager = SpotifyClientCredentials(
-                    client_id=client_id,
-                    client_secret=client_secret
-                )
-                self.spotify = spotipy.Spotify(auth_manager=auth_manager)
-                logger.info("Spotify client initialized successfully")
-                return True
-            except Exception as e:
-                logger.error(f"Failed to initialize Spotify client: {e}")
-                self.spotify = None
-                return False
-        else:
-            logger.warning("Spotify credentials not found, Spotify functionality will be limited")
-            self.spotify = None
-            return False
+        # We're disabling Spotify API integration to work without API keys
+        logger.info("Spotify API integration disabled - running in API-free mode")
+        self.spotify = None
+        return False
     
     def get_queue(self, guild_id: int) -> MusicQueue:
         """Get or create a MusicQueue for a guild."""
@@ -460,30 +444,69 @@ class MusicPlayer(commands.Cog):
         # Get the queue for this guild
         queue = self.get_queue(ctx.guild.id)
         
-        # Check if it's a Spotify URL
+        # Check if it's a Spotify URL (convert to YouTube search)
         if "open.spotify.com" in query:
-            await ctx.send("🔍 Processing Spotify link...")
+            await ctx.send("🔍 Converting Spotify link to YouTube search...")
             
-            # If Spotify is not configured
-            if self.spotify is None:
-                await ctx.send("⚠️ Spotify integration is not configured. Please provide a YouTube URL or search query instead.")
-                return
-            
-            songs = await self.process_spotify_url(query)
-            
-            if not songs:
-                await ctx.send("❌ Failed to process Spotify URL. Make sure it's a valid track, album, or playlist URL.")
-                return
-            
-            # Add the songs to the queue
-            for song in songs:
+            # Extract the track/artist name from Spotify URL if possible
+            try:
+                # Simple regex to extract song name from URL or use as search
+                track_name_match = re.search(r'track/[a-zA-Z0-9]+/([^?]+)', query)
+                if track_name_match:
+                    track_name = track_name_match.group(1).replace('-', ' ')
+                    search_query = track_name + " audio"
+                else:
+                    # If we can't extract, just use the URL as a search term
+                    search_query = query
+                
+                await ctx.send(f"🔍 Searching for: {search_query}")
+                # Now search YouTube with this query
+                song = await YTDLSource.create_source(search_query, loop=self.bot.loop)
+                
+                # Add the song to the queue
                 queue.add(song)
-            
-            await ctx.send(f"➕ Added {len(songs)} songs from Spotify to the queue!")
-            
-            # Start playing if not already playing
-            if not ctx.voice_client.is_playing() and not queue.is_empty():
-                await self.play_next_song(ctx)
+                
+                # Send confirmation message
+                embed = discord.Embed(
+                    title="➕ Added to Queue (from Spotify link)",
+                    description=f"[{song.title}]({song.webpage_url})",
+                    color=discord.Color.green()
+                )
+                
+                if song.thumbnail:
+                    embed.set_thumbnail(url=song.thumbnail)
+                
+                if song.duration:
+                    minutes, seconds = divmod(song.duration, 60)
+                    embed.add_field(name="Duration", value=f"{minutes}:{seconds:02d}", inline=True)
+                
+                embed.add_field(name="Uploader", value=song.uploader, inline=True)
+                
+                position = len(queue.songs)
+                embed.set_footer(text=f"Position in queue: {position}")
+                
+                await ctx.send(embed=embed)
+                
+                # Start playing if not already playing
+                if not ctx.voice_client.is_playing() and not queue.is_empty():
+                    await self.play_next_song(ctx)
+                
+            except Exception as e:
+                logger.error(f"Error processing Spotify URL: {e}")
+                await ctx.send(f"❌ Could not process Spotify link. Trying as a general search query...")
+                
+                # Fall back to treating the whole URL as a search term
+                try:
+                    song = await YTDLSource.create_source(query, loop=self.bot.loop)
+                    queue.add(song)
+                    await ctx.send(f"✅ Added to queue: {song.title}")
+                    
+                    # Start playing if not already playing
+                    if not ctx.voice_client.is_playing() and not queue.is_empty():
+                        await self.play_next_song(ctx)
+                except Exception as e2:
+                    logger.error(f"Error in fallback search: {e2}")
+                    await ctx.send(f"❌ An error occurred: {str(e2)}")
             
             return
         
