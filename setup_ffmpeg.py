@@ -7,6 +7,7 @@ import os
 import subprocess
 import logging
 import sys
+import shutil
 
 logging.basicConfig(
     level=logging.INFO,
@@ -15,6 +16,40 @@ logging.basicConfig(
 )
 
 logger = logging.getLogger('setup_ffmpeg')
+
+# Global variable to store the verified FFmpeg path
+FFMPEG_PATH = '/nix/store/3zc5jbvqzrn8zmva4fx5p0nh4yy03wk4-ffmpeg-6.1.1-bin/bin/ffmpeg'
+
+def get_ffmpeg_path():
+    """Returns the path to the ffmpeg executable."""
+    global FFMPEG_PATH
+    
+    # Check if ffmpeg exists at the expected path
+    if os.path.exists(FFMPEG_PATH):
+        return FFMPEG_PATH
+    
+    # Try to find ffmpeg in PATH
+    ffmpeg_in_path = shutil.which('ffmpeg')
+    if ffmpeg_in_path:
+        FFMPEG_PATH = ffmpeg_in_path
+        return FFMPEG_PATH
+    
+    # Last resort: try common locations
+    common_locations = [
+        '/usr/bin/ffmpeg',
+        '/usr/local/bin/ffmpeg',
+        '/opt/homebrew/bin/ffmpeg',
+        os.path.expanduser('~/.local/bin/ffmpeg')
+    ]
+    
+    for location in common_locations:
+        if os.path.exists(location):
+            FFMPEG_PATH = location
+            return FFMPEG_PATH
+    
+    # If we get here, we couldn't find ffmpeg
+    logger.error("Could not find ffmpeg executable")
+    return FFMPEG_PATH  # Return the default path anyway as last resort
 
 def setup_ffmpeg():
     """Setup FFmpeg for Discord bot."""
