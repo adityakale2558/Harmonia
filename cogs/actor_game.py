@@ -448,7 +448,7 @@ class ActorGame(commands.Cog):
     
     @commands.command(name="endgame")
     async def end_game(self, ctx):
-        """End the current 'Guess the Actor' game (host only or admin)."""
+        """End the current 'Guess It' game (host only or admin)."""
         guild_id = ctx.guild.id
         
         # Check if a game is running
@@ -466,7 +466,7 @@ class ActorGame(commands.Cog):
         # Build a summary of the game
         embed = discord.Embed(
             title="🎭 Game Ended",
-            description=f"The 'Guess the Actor' game has been ended by {ctx.author.mention}.",
+            description=f"The 'Guess It' game has been ended by {ctx.author.mention}.",
             color=discord.Color.orange()
         )
         

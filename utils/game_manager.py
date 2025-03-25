@@ -2,7 +2,7 @@ import time
 from typing import Dict, List, Optional, Set
 
 class Player:
-    """Class representing a player in the 'Guess the Actor' game."""
+    """Class representing a player in the 'Guess It' game."""
     
     def __init__(self, id: int, name: str):
         self.id = id  # Discord user ID
@@ -15,7 +15,7 @@ class Player:
         return f"Player({self.name}, actor={self.actor})"
 
 class GameSession:
-    """Class representing a game session for the 'Guess the Actor' game."""
+    """Class representing a game session for the 'Guess It' game."""
     
     def __init__(self, host_id: int, channel_id: int, category: str):
         self.host_id = host_id  # ID of the user who started the game
