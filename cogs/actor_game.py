@@ -143,7 +143,7 @@ class ActorGame(commands.Cog):
         
         # Check if a game is running in this guild
         if guild_id not in self.game_sessions:
-            await ctx.send("❌ No game is currently running. Start one with `!startgame`.")
+            await ctx.send("❌ No game is currently running. Start one with `=startgame`.")
             return
         
         session = self.game_sessions[guild_id]
@@ -185,7 +185,7 @@ class ActorGame(commands.Cog):
             color=discord.Color.blue()
         )
         embed.add_field(name="Players", value="\n".join(player_mentions), inline=False)
-        embed.set_footer(text=f"Host: {ctx.guild.get_member(session.host_id).display_name} | Use !assign to start when ready")
+        embed.set_footer(text=f"Host: {ctx.guild.get_member(session.host_id).display_name} | Use =assign to start when ready")
         
         await ctx.send(embed=embed)
         logger.info(f"Player {ctx.author.id} joined game in guild {guild_id}")
@@ -197,7 +197,7 @@ class ActorGame(commands.Cog):
         
         # Check if a game is running in this guild
         if guild_id not in self.game_sessions:
-            await ctx.send("❌ No game is currently running. Start one with `!startgame`.")
+            await ctx.send("❌ No game is currently running. Start one with `=startgame`.")
             return
         
         session = self.game_sessions[guild_id]
@@ -251,8 +251,8 @@ class ActorGame(commands.Cog):
                             f"Game in server: **{ctx.guild.name}**\n"
                             f"Category: **{session.category}**\n\n"
                             f"You need to guess your actor by asking questions!\n"
-                            f"Use `!question <your question>` in the game channel to ask questions.\n"
-                            f"When ready to guess, use `!guess <actor name>`."
+                            f"Use `=question <your question>` in the game channel to ask questions.\n"
+                            f"When ready to guess, use `=guess <actor name>`."
                         ),
                         color=discord.Color.gold()
                     )
@@ -275,9 +275,9 @@ class ActorGame(commands.Cog):
                 f"Actors have been assigned to all players via DM!\n\n"
                 f"**How to play:**\n"
                 f"- You know everyone's actor except your own\n"
-                f"- Ask questions with `!question <your question>`\n"
+                f"- Ask questions with `=question <your question>`\n"
                 f"- Others will answer to help you guess\n"
-                f"- When ready, guess with `!guess <actor name>`\n"
+                f"- When ready, guess with `=guess <actor name>`\n"
                 f"- You have {config.GUESS_LIMIT} guess attempts"
             ),
             color=discord.Color.green()
@@ -291,7 +291,7 @@ class ActorGame(commands.Cog):
         """
         Ask a question to help guess your actor.
         
-        Usage: !question Is my actor male?
+        Usage: =question Is my actor male?
         """
         guild_id = ctx.guild.id
         
@@ -315,7 +315,7 @@ class ActorGame(commands.Cog):
         
         # Check if a question was provided
         if not question:
-            await ctx.send("❌ You need to ask a question. Use `!question <your question>`")
+            await ctx.send("❌ You need to ask a question. Use `=question <your question>`")
             return
         
         # Check if the player has already guessed correctly
@@ -349,7 +349,7 @@ class ActorGame(commands.Cog):
         """
         Make a guess for your assigned actor.
         
-        Usage: !guess Tom Hanks
+        Usage: =guess Tom Hanks
         """
         guild_id = ctx.guild.id
         
@@ -378,7 +378,7 @@ class ActorGame(commands.Cog):
         
         # Check if a guess was provided
         if not actor_name:
-            await ctx.send("❌ You need to provide a guess. Use `!guess <actor name>`")
+            await ctx.send("❌ You need to provide a guess. Use `=guess <actor name>`")
             return
         
         # Check if the player has used all their guesses
