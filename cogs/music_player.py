@@ -49,7 +49,7 @@ os.environ['PATH'] = f"/nix/store/3zc5jbvqzrn8zmva4fx5p0nh4yy03wk4-ffmpeg-6.1.1-
 ffmpeg_options = {
     'options': '-vn',
     'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5',
-    'executable': FFMPEG_PATH,  # Use the explicit path
+    # Removed executable from here as it's passed directly to FFmpegPCMAudio
 }
 
 class YTDLSource(discord.PCMVolumeTransformer):
@@ -630,54 +630,128 @@ class MusicPlayer(commands.Cog):
         
         # If no query is provided, use the current song
         if query is None:
-            if queue.current_song is None:
-                await ctx.send("❌ No song is currently playing.")
+            current_song = queue.current_song
+            if current_song is None:
+                await ctx.send("❌ No song is currently playing. Please provide a song name.")
                 return
             
             # Remove any "(Official Video)" or similar text from the title
-            title = queue.current_song.title
+            title = current_song.title
             title = re.sub(r'\([^)]*\)|ft\..*|feat\..*|-\s+[\w\s]+', '', title)
             query = title.strip()
+            
+            # Add artist name to query if available for better results
+            if hasattr(current_song, 'uploader') and current_song.uploader and current_song.uploader.lower() != "unknown":
+                query += f" {current_song.uploader}"
         
-        await ctx.send(f"🔍 Searching for lyrics: {query}")
+        # Check if Genius API key is provided
+        if not config.GENIUS_API_KEY:
+            await ctx.send("⚠️ No Genius API key configured. Lyrics functionality will be limited.")
         
-        try:
-            # Fetch lyrics
-            lyrics_data = await fetch_lyrics(query, api_key=config.GENIUS_API_KEY)
-            
-            if not lyrics_data or not lyrics_data.get('lyrics'):
-                await ctx.send(f"❌ Couldn't find lyrics for: {query}")
-                return
-            
-            # Create embeds for the lyrics (Discord has a 2000 character limit per embed)
-            title = lyrics_data.get('title', 'Unknown')
-            artist = lyrics_data.get('artist', 'Unknown')
-            lyrics = lyrics_data.get('lyrics', 'No lyrics found')
-            
-            # Split lyrics into chunks of 2000 characters or less
-            chunks = [lyrics[i:i+2000] for i in range(0, len(lyrics), 2000)]
-            
-            # Send the first embed with title and artist
-            first_embed = discord.Embed(
-                title=f"📝 Lyrics: {title}",
-                description=chunks[0],
-                color=discord.Color.purple()
-            )
-            first_embed.set_author(name=f"Artist: {artist}")
-            
-            await ctx.send(embed=first_embed)
-            
-            # Send the rest of the lyrics in separate embeds
-            for chunk in chunks[1:]:
-                embed = discord.Embed(
-                    description=chunk,
-                    color=discord.Color.purple()
+        # Show a typing indicator to indicate that the bot is processing
+        async with ctx.typing():
+            try:
+                await ctx.send(f"🔍 Searching for lyrics: `{query}`")
+                
+                # Fetch lyrics
+                lyrics_data = await fetch_lyrics(query, api_key=config.GENIUS_API_KEY)
+                
+                if not lyrics_data or not lyrics_data.get('lyrics'):
+                    error_message = lyrics_data.get('error', 'Unknown error')
+                    if "API key required" in error_message:
+                        await ctx.send("⚠️ Genius API key is required for lyrics functionality. Please contact the bot administrator.")
+                    else:
+                        await ctx.send(f"❌ Couldn't find lyrics for: `{query}`\nReason: {lyrics_data.get('lyrics', 'No results found')}")
+                    return
+                
+                # Create embeds for the lyrics (Discord has a 2000 character limit per embed)
+                title = lyrics_data.get('title', 'Unknown')
+                artist = lyrics_data.get('artist', 'Unknown')
+                lyrics = lyrics_data.get('lyrics', 'No lyrics found')
+                source = lyrics_data.get('source', 'Unknown')
+                url = lyrics_data.get('url', None)
+                thumbnail = lyrics_data.get('thumbnail', None)
+                alternatives = lyrics_data.get('alternatives', [])
+                
+                # Split lyrics into chunks of 1800 characters or less (leaving room for formatting)
+                # Try to split on double newlines to keep stanzas together
+                chunks = []
+                current_chunk = ""
+                
+                for line in lyrics.split('\n'):
+                    if len(current_chunk) + len(line) + 1 > 1800:
+                        chunks.append(current_chunk)
+                        current_chunk = line
+                    else:
+                        if current_chunk:
+                            current_chunk += '\n' + line
+                        else:
+                            current_chunk = line
+                
+                if current_chunk:
+                    chunks.append(current_chunk)
+                
+                if not chunks:
+                    chunks = ["No lyrics found"]
+                
+                # Send the first embed with title and artist
+                first_embed = discord.Embed(
+                    title=f"📝 Lyrics: {title}",
+                    description=chunks[0],
+                    color=discord.Color.purple(),
+                    url=url
                 )
-                await ctx.send(embed=embed)
-            
-        except Exception as e:
-            logger.error(f"Error fetching lyrics: {e}")
-            await ctx.send(f"❌ Error fetching lyrics: {str(e)}")
+                first_embed.set_author(name=f"Artist: {artist}")
+                
+                if thumbnail:
+                    first_embed.set_thumbnail(url=thumbnail)
+                
+                if source:
+                    first_embed.set_footer(text=f"Source: {source} | Page 1/{len(chunks)}")
+                
+                await ctx.send(embed=first_embed)
+                
+                # Send the rest of the lyrics in separate embeds
+                for i, chunk in enumerate(chunks[1:], 2):
+                    embed = discord.Embed(
+                        description=chunk,
+                        color=discord.Color.purple(),
+                        url=url
+                    )
+                    embed.set_footer(text=f"Source: {source} | Page {i}/{len(chunks)}")
+                    await ctx.send(embed=embed)
+                
+                # If there are alternative matches, send them as a suggestion
+                if alternatives and len(alternatives) > 0:
+                    alt_embed = discord.Embed(
+                        title="💡 Did you mean one of these songs instead?",
+                        color=discord.Color.gold()
+                    )
+                    
+                    for i, alt in enumerate(alternatives, 1):
+                        alt_title = alt.get('title', 'Unknown')
+                        alt_artist = alt.get('artist', 'Unknown')
+                        alt_url = alt.get('url', None)
+                        
+                        if alt_url:
+                            alt_embed.add_field(
+                                name=f"{i}. {alt_title}",
+                                value=f"By {alt_artist}\n[View on Genius]({alt_url})",
+                                inline=False
+                            )
+                        else:
+                            alt_embed.add_field(
+                                name=f"{i}. {alt_title}",
+                                value=f"By {alt_artist}",
+                                inline=False
+                            )
+                    
+                    alt_embed.set_footer(text="Use =lyrics <song title> to get lyrics for a specific song")
+                    await ctx.send(embed=alt_embed)
+                
+            except Exception as e:
+                logger.error(f"Error fetching lyrics: {e}")
+                await ctx.send(f"❌ Error fetching lyrics: {str(e)}")
     
     @commands.command(name="nowplaying", aliases=["np"])
     async def now_playing(self, ctx):
