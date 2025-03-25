@@ -1,0 +1,237 @@
+{% extends "layout.html" %}
+
+{% block title %}Actor Database - Harmonia Discord Bot{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-6 mb-4">
+        <div class="card border-0 shadow">
+            <div class="card-header bg-dark d-flex justify-content-between align-items-center">
+                <h5 class="card-title mb-0">
+                    <i class="fas fa-film me-2"></i> 
+                    Hollywood Actors ({{ hollywood_actors|length }})
+                </h5>
+                <button class="btn btn-sm btn-primary" type="button" data-bs-toggle="modal" data-bs-target="#addHollywoodActor">
+                    <i class="fas fa-plus me-1"></i> Add
+                </button>
+            </div>
+            <div class="card-body p-0">
+                {% if hollywood_actors %}
+                    <div class="table-responsive">
+                        <table class="table table-hover mb-0">
+                            <thead class="table-dark">
+                                <tr>
+                                    <th scope="col">#</th>
+                                    <th scope="col">Actor Name</th>
+                                    <th scope="col" class="text-end">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for actor in hollywood_actors %}
+                                <tr>
+                                    <th scope="row">{{ loop.index }}</th>
+                                    <td>{{ actor }}</td>
+                                    <td class="text-end">
+                                        <button type="button" class="btn btn-sm btn-danger" 
+                                                data-bs-toggle="modal" 
+                                                data-bs-target="#removeActorModal"
+                                                data-actor-name="{{ actor }}"
+                                                data-category="hollywood">
+                                            <i class="fas fa-trash"></i>
+                                        </button>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                {% else %}
+                    <div class="alert alert-info m-3">
+                        No Hollywood actors found. Add some using the "Add" button.
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-6 mb-4">
+        <div class="card border-0 shadow">
+            <div class="card-header bg-dark d-flex justify-content-between align-items-center">
+                <h5 class="card-title mb-0">
+                    <i class="fas fa-film me-2"></i> 
+                    Bollywood Actors ({{ bollywood_actors|length }})
+                </h5>
+                <button class="btn btn-sm btn-primary" type="button" data-bs-toggle="modal" data-bs-target="#addBollywoodActor">
+                    <i class="fas fa-plus me-1"></i> Add
+                </button>
+            </div>
+            <div class="card-body p-0">
+                {% if bollywood_actors %}
+                    <div class="table-responsive">
+                        <table class="table table-hover mb-0">
+                            <thead class="table-dark">
+                                <tr>
+                                    <th scope="col">#</th>
+                                    <th scope="col">Actor Name</th>
+                                    <th scope="col" class="text-end">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for actor in bollywood_actors %}
+                                <tr>
+                                    <th scope="row">{{ loop.index }}</th>
+                                    <td>{{ actor }}</td>
+                                    <td class="text-end">
+                                        <button type="button" class="btn btn-sm btn-danger" 
+                                                data-bs-toggle="modal" 
+                                                data-bs-target="#removeActorModal"
+                                                data-actor-name="{{ actor }}"
+                                                data-category="bollywood">
+                                            <i class="fas fa-trash"></i>
+                                        </button>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                {% else %}
+                    <div class="alert alert-info m-3">
+                        No Bollywood actors found. Add some using the "Add" button.
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-12">
+        <div class="card border-0 shadow">
+            <div class="card-header bg-dark">
+                <h5 class="card-title mb-0">
+                    <i class="fas fa-question-circle me-2"></i> 
+                    About the Actor Game
+                </h5>
+            </div>
+            <div class="card-body">
+                <p>The "Guess the Actor" game is a fun party game where players are assigned an actor but can't see who they are. Other players can see your assigned actor, and you need to ask yes/no questions to figure out who you are.</p>
+                
+                <h5>How to Play:</h5>
+                <ol>
+                    <li>The host starts a game using <code>!startgame [category]</code> command</li>
+                    <li>Players join the game using <code>!join</code> command</li>
+                    <li>The host assigns actors to players using <code>!assign</code> command</li>
+                    <li>Players take turns asking questions about their assigned actor using <code>!question [text]</code></li>
+                    <li>When ready, players can make a guess using <code>!guess [actor name]</code></li>
+                    <li>The game continues until all players have correctly guessed their actors</li>
+                </ol>
+                
+                <div class="alert alert-info">
+                    <i class="fas fa-info-circle me-2"></i>
+                    You can expand the actor database by adding more actors to each category using this dashboard.
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Add Hollywood Actor Modal -->
+<div class="modal fade" id="addHollywoodActor" tabindex="-1" aria-labelledby="addHollywoodActorLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="addHollywoodActorLabel">Add Hollywood Actor</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form action="{{ url_for('add_actor') }}" method="POST">
+                <div class="modal-body">
+                    <input type="hidden" name="category" value="hollywood">
+                    <div class="mb-3">
+                        <label for="hollywood-actor-name" class="form-label">Actor Name</label>
+                        <input type="text" class="form-control" id="hollywood-actor-name" name="actor_name" required>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Add Actor</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Add Bollywood Actor Modal -->
+<div class="modal fade" id="addBollywoodActor" tabindex="-1" aria-labelledby="addBollywoodActorLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="addBollywoodActorLabel">Add Bollywood Actor</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form action="{{ url_for('add_actor') }}" method="POST">
+                <div class="modal-body">
+                    <input type="hidden" name="category" value="bollywood">
+                    <div class="mb-3">
+                        <label for="bollywood-actor-name" class="form-label">Actor Name</label>
+                        <input type="text" class="form-control" id="bollywood-actor-name" name="actor_name" required>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Add Actor</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Remove Actor Modal -->
+<div class="modal fade" id="removeActorModal" tabindex="-1" aria-labelledby="removeActorModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="removeActorModalLabel">Confirm Removal</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form action="{{ url_for('remove_actor') }}" method="POST">
+                <div class="modal-body">
+                    <input type="hidden" name="category" id="remove-category">
+                    <input type="hidden" name="actor_name" id="remove-actor-name">
+                    <p>Are you sure you want to remove <span id="actor-to-remove" class="fw-bold"></span> from the database?</p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-danger">Remove</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // Set up the remove actor modal
+    const removeActorModal = document.getElementById('removeActorModal');
+    if (removeActorModal) {
+        removeActorModal.addEventListener('show.bs.modal', event => {
+            // Get the button that triggered the modal
+            const button = event.relatedTarget;
+            
+            // Extract info from data attributes
+            const actorName = button.getAttribute('data-actor-name');
+            const category = button.getAttribute('data-category');
+            
+            // Update the modal's content
+            const actorToRemove = removeActorModal.querySelector('#actor-to-remove');
+            const removeCategory = removeActorModal.querySelector('#remove-category');
+            const removeActorName = removeActorModal.querySelector('#remove-actor-name');
+            
+            actorToRemove.textContent = actorName;
+            removeCategory.value = category;
+            removeActorName.value = actorName;
+        });
+    }
+</script>
+{% endblock %}

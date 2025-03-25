@@ -1,368 +1,551 @@
 import discord
-from discord.ext import commands
+from discord.ext import commands, tasks
 import asyncio
-import random
-import json
 import logging
+import random
+import time
+import json
 import os
 from typing import Dict, List, Optional, Set
-from config import Config
-from utils.actor_database import ActorDatabase
 
-logger = logging.getLogger("discord_bot.actor_game")
+import config
+from utils.game_manager import GameSession, Player
+
+logger = logging.getLogger('discord_bot.actor_game')
 
 class ActorGame(commands.Cog):
-    """
-    A Discord game where players need to guess the actor assigned to them
-    by asking questions to other players.
-    """
+    """Cog that implements the 'Guess the Actor' game functionality."""
     
     def __init__(self, bot):
         self.bot = bot
-        self.actor_db = ActorDatabase()
-        self.active_games = {}  # Dictionary to store active games by channel ID
+        self.game_sessions: Dict[int, GameSession] = {}  # {guild_id: GameSession}
+        self.actors = self._load_actors()
+        self.check_inactive_games.start()
     
-    @commands.Cog.listener()
-    async def on_ready(self):
-        """Initializes the actor database when the cog is loaded."""
-        await self.actor_db.load_actors()
-        logger.info("Actor Game cog is ready")
+    def _load_actors(self) -> Dict[str, List[str]]:
+        """Load actor data from the JSON file."""
+        try:
+            with open('data/actors.json', 'r', encoding='utf-8') as f:
+                return json.load(f)
+        except FileNotFoundError:
+            logger.warning("Actors database file not found. Creating a new one.")
+            # Create a default actors dictionary
+            default_actors = {
+                "Hollywood": [
+                    "Tom Hanks", "Leonardo DiCaprio", "Brad Pitt", "Meryl Streep", 
+                    "Jennifer Lawrence", "Denzel Washington", "Robert Downey Jr.",
+                    "Scarlett Johansson", "Tom Cruise", "Emma Stone"
+                ],
+                "Bollywood": [
+                    "Shah Rukh Khan", "Amitabh Bachchan", "Deepika Padukone", 
+                    "Aamir Khan", "Priyanka Chopra", "Salman Khan", "Alia Bhatt",
+                    "Hrithik Roshan", "Katrina Kaif", "Ranbir Kapoor"
+                ]
+            }
+            
+            # Save the default actors to the file
+            os.makedirs('data', exist_ok=True)
+            with open('data/actors.json', 'w', encoding='utf-8') as f:
+                json.dump(default_actors, f, indent=4)
+            
+            return default_actors
     
-    @commands.group(name="actor", invoke_without_command=True)
-    async def actor_group(self, ctx):
-        """Command group for the actor guessing game."""
-        await ctx.send(f"Use `{Config.PREFIX}actor start` to start a new game or "
-                      f"`{Config.PREFIX}actor help` for more information.")
+    def cog_unload(self):
+        """Cleanup when the cog is unloaded."""
+        self.check_inactive_games.cancel()
     
-    @actor_group.command(name="help")
-    async def actor_help(self, ctx):
-        """Display help information for the actor game."""
+    @tasks.loop(minutes=1)
+    async def check_inactive_games(self):
+        """Check and remove inactive game sessions."""
+        current_time = time.time()
+        
+        for guild_id, session in list(self.game_sessions.items()):
+            if current_time - session.last_activity > config.GAME_TIMEOUT:
+                channel = self.bot.get_channel(session.channel_id)
+                if channel:
+                    await channel.send("⏲️ Game ended due to inactivity.")
+                
+                del self.game_sessions[guild_id]
+                logger.info(f"Game session in guild {guild_id} ended due to inactivity")
+    
+    @check_inactive_games.before_loop
+    async def before_check_inactive_games(self):
+        """Wait until the bot is ready before starting the task."""
+        await self.bot.wait_until_ready()
+    
+    @commands.command(name="startgame")
+    async def start_game(self, ctx, category=None):
+        """
+        Start a new 'Guess the Actor' game.
+        
+        Usage: !startgame [category]
+        Available categories: Hollywood, Bollywood
+        """
+        guild_id = ctx.guild.id
+        
+        # Check if a game is already running in this guild
+        if guild_id in self.game_sessions:
+            await ctx.send("❌ A game is already running in this server. Use `!endgame` to end it first.")
+            return
+        
+        # Validate category
+        if category is None:
+            # If no category is provided, list available categories
+            categories_list = ", ".join(config.CATEGORIES)
+            await ctx.send(f"Please specify a category: `!startgame <category>`\nAvailable categories: {categories_list}")
+            return
+        
+        category = category.capitalize()
+        if category not in config.CATEGORIES:
+            categories_list = ", ".join(config.CATEGORIES)
+            await ctx.send(f"❌ Invalid category. Available categories: {categories_list}")
+            return
+        
+        # Create a new game session
+        session = GameSession(
+            host_id=ctx.author.id,
+            channel_id=ctx.channel.id,
+            category=category
+        )
+        
+        # Add the host as the first player
+        session.add_player(Player(
+            id=ctx.author.id,
+            name=ctx.author.display_name
+        ))
+        
+        self.game_sessions[guild_id] = session
+        
+        # Send game start message
         embed = discord.Embed(
-            title="Guess the Actor - Help",
-            description="A game where players try to guess which actor they've been assigned.",
+            title="🎭 Guess the Actor Game",
+            description=f"Game started with category: **{category}**\n\n"
+                       f"Other players can join with `!join`\n"
+                       f"When ready, the host can use `!assign` to assign actors to players.",
             color=discord.Color.green()
         )
-        
-        embed.add_field(
-            name="How to Play", 
-            value=("1. Start a game with `!actor start`\n"
-                  "2. Players join with `!actor join`\n"
-                  "3. Select a category with `!actor category [hollywood/bollywood]`\n"
-                  "4. Start the game with `!actor begin`\n"
-                  "5. Each player will be assigned an actor (they won't know who)\n"
-                  "6. Players take turns asking yes/no questions to figure out their actor\n"
-                  "7. Guess your actor with `!actor guess [name]`"), 
-            inline=False
-        )
-        
-        embed.add_field(
-            name="Commands", 
-            value=(f"`{Config.PREFIX}actor start` - Start a new game in this channel\n"
-                  f"`{Config.PREFIX}actor join` - Join the game in this channel\n"
-                  f"`{Config.PREFIX}actor category [type]` - Select Hollywood or Bollywood\n"
-                  f"`{Config.PREFIX}actor begin` - Begin the game after all players joined\n"
-                  f"`{Config.PREFIX}actor guess [name]` - Guess your assigned actor\n"
-                  f"`{Config.PREFIX}actor end` - End the current game"), 
-            inline=False
-        )
+        embed.add_field(name="Players", value=ctx.author.mention, inline=False)
+        embed.add_field(name="How to Play", value=(
+            "1. Join the game with `!join`\n"
+            "2. The host will assign actors to everyone with `!assign`\n"
+            "3. You'll see everyone's actor name except your own\n"
+            "4. Ask questions to figure out your actor using `!question <your question>`\n"
+            "5. When you're ready to guess, use `!guess <actor name>`"
+        ), inline=False)
         
         await ctx.send(embed=embed)
+        logger.info(f"Game started in guild {guild_id} with category {category}")
     
-    @actor_group.command(name="start")
-    async def start_game(self, ctx):
-        """Start a new actor guessing game in the current channel."""
-        channel_id = ctx.channel.id
-        
-        # Check if there's already an active game in this channel
-        if channel_id in self.active_games:
-            await ctx.send("There's already an active game in this channel. "
-                           f"Use `{Config.PREFIX}actor end` to end it first.")
-            return
-        
-        # Create a new game
-        self.active_games[channel_id] = {
-            "host": ctx.author,
-            "players": [ctx.author],
-            "player_ids": {ctx.author.id},
-            "category": None,
-            "started": False,
-            "actor_assignments": {},
-            "guessed_correctly": set(),
-            "turn_index": 0
-        }
-        
-        await ctx.send(f"Actor guessing game started by {ctx.author.mention}! "
-                       f"Other players can join with `{Config.PREFIX}actor join`. "
-                       f"The host should select a category with `{Config.PREFIX}actor category [hollywood/bollywood]`.")
-    
-    @actor_group.command(name="join")
+    @commands.command(name="join")
     async def join_game(self, ctx):
-        """Join an existing actor guessing game in the current channel."""
-        channel_id = ctx.channel.id
+        """Join an ongoing 'Guess the Actor' game."""
+        guild_id = ctx.guild.id
         
-        # Check if there's an active game in this channel
-        if channel_id not in self.active_games:
-            await ctx.send(f"There's no active game in this channel. Start one with `{Config.PREFIX}actor start`.")
+        # Check if a game is running in this guild
+        if guild_id not in self.game_sessions:
+            await ctx.send("❌ No game is currently running. Start one with `!startgame`.")
             return
         
-        game = self.active_games[channel_id]
+        session = self.game_sessions[guild_id]
         
-        # Check if the game has already started
-        if game["started"]:
-            await ctx.send("This game has already started. Wait for the current game to end.")
+        # Check if the game is already in progress (actors assigned)
+        if session.is_in_progress:
+            await ctx.send("❌ Can't join, the game is already in progress.")
             return
         
         # Check if the player is already in the game
-        if ctx.author.id in game["player_ids"]:
-            await ctx.send("You've already joined this game!")
+        if session.get_player(ctx.author.id) is not None:
+            await ctx.send("❌ You're already in the game!")
             return
         
-        # Check if max players limit is reached
-        if len(game["players"]) >= Config.MAX_PLAYERS:
-            await ctx.send(f"The game is full (maximum {Config.MAX_PLAYERS} players).")
+        # Check if the maximum number of players has been reached
+        if len(session.players) >= config.MAX_PLAYERS:
+            await ctx.send(f"❌ Maximum number of players ({config.MAX_PLAYERS}) reached.")
             return
         
         # Add the player to the game
-        game["players"].append(ctx.author)
-        game["player_ids"].add(ctx.author.id)
+        session.add_player(Player(
+            id=ctx.author.id,
+            name=ctx.author.display_name
+        ))
         
-        await ctx.send(f"{ctx.author.mention} has joined the game! "
-                      f"Current players: {', '.join(player.display_name for player in game['players'])}")
+        session.last_activity = time.time()
+        
+        # Get all player mentions
+        player_mentions = [f"<@{player.id}>" for player in session.players]
+        
+        # Send confirmation message
+        await ctx.send(f"✅ {ctx.author.mention} joined the game!")
+        
+        # Update the players list in an embed
+        embed = discord.Embed(
+            title="🎭 Guess the Actor Game",
+            description=f"Category: **{session.category}**\n\n"
+                       f"Current players ({len(session.players)}/{config.MAX_PLAYERS}):",
+            color=discord.Color.blue()
+        )
+        embed.add_field(name="Players", value="\n".join(player_mentions), inline=False)
+        embed.set_footer(text=f"Host: {ctx.guild.get_member(session.host_id).display_name} | Use !assign to start when ready")
+        
+        await ctx.send(embed=embed)
+        logger.info(f"Player {ctx.author.id} joined game in guild {guild_id}")
     
-    @actor_group.command(name="category")
-    async def set_category(self, ctx, category: str = None):
-        """Set the category for the actor guessing game (hollywood/bollywood)."""
-        channel_id = ctx.channel.id
+    @commands.command(name="assign")
+    async def assign_actors(self, ctx):
+        """Assign actors to players and start the game (host only)."""
+        guild_id = ctx.guild.id
         
-        # Check if there's an active game in this channel
-        if channel_id not in self.active_games:
-            await ctx.send(f"There's no active game in this channel. Start one with `{Config.PREFIX}actor start`.")
+        # Check if a game is running in this guild
+        if guild_id not in self.game_sessions:
+            await ctx.send("❌ No game is currently running. Start one with `!startgame`.")
             return
         
-        game = self.active_games[channel_id]
+        session = self.game_sessions[guild_id]
         
-        # Check if the command user is the host
-        if ctx.author != game["host"]:
-            await ctx.send("Only the game host can set the category.")
+        # Check if the command was issued by the host
+        if ctx.author.id != session.host_id:
+            await ctx.send("❌ Only the game host can assign actors.")
             return
         
-        # Check if the game has already started
-        if game["started"]:
-            await ctx.send("Cannot change the category after the game has started.")
-            return
-        
-        # Validate and set the category
-        if category and category.lower() in ["hollywood", "bollywood"]:
-            game["category"] = category.lower()
-            await ctx.send(f"Category set to {category.title()}. "
-                           f"Start the game with `{Config.PREFIX}actor begin` when everyone has joined.")
-        else:
-            await ctx.send(f"Invalid category. Please choose either 'hollywood' or 'bollywood'.\n"
-                           f"Example: `{Config.PREFIX}actor category hollywood`")
-    
-    @actor_group.command(name="begin")
-    async def begin_game(self, ctx):
-        """Start the actor guessing game after all players have joined."""
-        channel_id = ctx.channel.id
-        
-        # Check if there's an active game in this channel
-        if channel_id not in self.active_games:
-            await ctx.send(f"There's no active game in this channel. Start one with `{Config.PREFIX}actor start`.")
-            return
-        
-        game = self.active_games[channel_id]
-        
-        # Check if the command user is the host
-        if ctx.author != game["host"]:
-            await ctx.send("Only the game host can begin the game.")
-            return
-        
-        # Check if the game has already started
-        if game["started"]:
-            await ctx.send("The game has already started!")
-            return
-        
-        # Check if a category has been selected
-        if not game["category"]:
-            await ctx.send(f"Please select a category first with `{Config.PREFIX}actor category [hollywood/bollywood]`.")
+        # Check if the game is already in progress
+        if session.is_in_progress:
+            await ctx.send("❌ Actors have already been assigned for this game.")
             return
         
         # Check if there are enough players
-        if len(game["players"]) < Config.MIN_PLAYERS:
-            await ctx.send(f"Not enough players to start the game. Need at least {Config.MIN_PLAYERS} players.")
+        if len(session.players) < config.MIN_PLAYERS:
+            await ctx.send(f"❌ Need at least {config.MIN_PLAYERS} players to start. Currently: {len(session.players)}.")
             return
         
-        # Assign actors to players
-        actors = await self.actor_db.get_actors_by_category(game["category"])
-        if len(actors) < len(game["players"]):
-            await ctx.send(f"Not enough actors in the {game['category']} category. Please choose another category.")
+        # Get actors for the selected category
+        category_actors = self.actors.get(session.category, [])
+        if not category_actors:
+            await ctx.send(f"❌ No actors found for category '{session.category}'.")
             return
         
         # Randomly select actors for each player
-        selected_actors = random.sample(actors, len(game["players"]))
+        selected_actors = random.sample(category_actors, len(session.players))
         
         # Assign actors to players
-        game["actor_assignments"] = {player.id: actor for player, actor in zip(game["players"], selected_actors)}
-        game["started"] = True
+        for i, player in enumerate(session.players):
+            player.actor = selected_actors[i]
         
-        # Send the game start message
-        await ctx.send("The Actor Guessing Game has begun! Each player has been assigned an actor.")
+        session.is_in_progress = True
+        session.last_activity = time.time()
         
-        # Send private messages to each player about other players' assigned actors
-        for player in game["players"]:
-            message = "**Actor Assignments (Don't share this information!):**\n"
-            for other_player in game["players"]:
-                if other_player.id != player.id:
-                    message += f"{other_player.display_name}: **{game['actor_assignments'][other_player.id]}**\n"
-            message += f"\nYou need to figure out your own actor by asking questions! It's a {game['category'].title()} actor."
-            
-            try:
-                await player.send(message)
-            except discord.Forbidden:
-                await ctx.send(f"{player.mention}, I couldn't send you a private message with the actor assignments. "
-                              "Please enable direct messages from server members for this game.")
+        # Notify players of actor assignments via DM
+        for i, player in enumerate(session.players):
+            member = ctx.guild.get_member(player.id)
+            if member:
+                # Create a list of other players and their actors
+                others_actors = []
+                for other_player in session.players:
+                    if other_player.id != player.id:
+                        others_actors.append(f"{other_player.name}: **{other_player.actor}**")
+                
+                try:
+                    # Send DM to player
+                    embed = discord.Embed(
+                        title="🎭 Your Actor Assignment",
+                        description=(
+                            f"Game in server: **{ctx.guild.name}**\n"
+                            f"Category: **{session.category}**\n\n"
+                            f"You need to guess your actor by asking questions!\n"
+                            f"Use `!question <your question>` in the game channel to ask questions.\n"
+                            f"When ready to guess, use `!guess <actor name>`."
+                        ),
+                        color=discord.Color.gold()
+                    )
+                    
+                    embed.add_field(
+                        name="Other Players' Actors",
+                        value="\n".join(others_actors) or "No other players",
+                        inline=False
+                    )
+                    
+                    await member.send(embed=embed)
+                except discord.Forbidden:
+                    # If we can't DM the user
+                    await ctx.send(f"⚠️ Couldn't send a DM to {member.mention}. Please enable DMs from server members.")
         
-        # Start the game with the first player's turn
-        game["turn_index"] = 0
-        current_player = game["players"][game["turn_index"]]
+        # Send confirmation in the game channel
+        embed = discord.Embed(
+            title="🎭 Game Started!",
+            description=(
+                f"Actors have been assigned to all players via DM!\n\n"
+                f"**How to play:**\n"
+                f"- You know everyone's actor except your own\n"
+                f"- Ask questions with `!question <your question>`\n"
+                f"- Others will answer to help you guess\n"
+                f"- When ready, guess with `!guess <actor name>`\n"
+                f"- You have {config.GUESS_LIMIT} guess attempts"
+            ),
+            color=discord.Color.green()
+        )
         
-        await ctx.send(f"It's {current_player.mention}'s turn! Ask a yes/no question to help figure out your actor. "
-                      "Other players can answer in the channel.")
+        await ctx.send(embed=embed)
+        logger.info(f"Actors assigned in game for guild {guild_id}")
     
-    @actor_group.command(name="guess")
-    async def guess_actor(self, ctx, *, actor_name: str = None):
-        """Guess the actor assigned to you."""
-        channel_id = ctx.channel.id
+    @commands.command(name="question")
+    async def ask_question(self, ctx, *, question=None):
+        """
+        Ask a question to help guess your actor.
         
-        # Check if there's an active game in this channel
-        if channel_id not in self.active_games:
-            await ctx.send(f"There's no active game in this channel. Start one with `{Config.PREFIX}actor start`.")
+        Usage: !question Is my actor male?
+        """
+        guild_id = ctx.guild.id
+        
+        # Check if a game is running
+        if guild_id not in self.game_sessions:
+            await ctx.send("❌ No game is currently running.")
             return
         
-        game = self.active_games[channel_id]
+        session = self.game_sessions[guild_id]
         
-        # Check if the game has started
-        if not game["started"]:
-            await ctx.send("The game hasn't started yet!")
+        # Check if the game is in progress
+        if not session.is_in_progress:
+            await ctx.send("❌ The game hasn't started yet. Wait for the host to assign actors.")
             return
         
-        # Check if the player is in the game
-        if ctx.author.id not in game["player_ids"]:
-            await ctx.send("You're not in this game!")
+        # Check if the user is in the game
+        player = session.get_player(ctx.author.id)
+        if player is None:
+            await ctx.send("❌ You're not in this game.")
+            return
+        
+        # Check if a question was provided
+        if not question:
+            await ctx.send("❌ You need to ask a question. Use `!question <your question>`")
             return
         
         # Check if the player has already guessed correctly
-        if ctx.author.id in game["guessed_correctly"]:
-            await ctx.send("You've already guessed your actor correctly!")
+        if player.has_guessed_correctly:
+            await ctx.send("❌ You've already guessed your actor correctly!")
             return
         
-        # Check if an actor name was provided
-        if not actor_name:
-            await ctx.send(f"Please provide an actor name to guess. Example: `{Config.PREFIX}actor guess Tom Hanks`")
-            return
+        session.last_activity = time.time()
         
-        # Get the assigned actor for the player
-        assigned_actor = game["actor_assignments"][ctx.author.id]
-        
-        # Check if the guess is correct (case-insensitive comparison)
-        if actor_name.lower() == assigned_actor.lower():
-            game["guessed_correctly"].add(ctx.author.id)
-            await ctx.send(f"🎉 Congratulations {ctx.author.mention}! **{assigned_actor}** is correct!")
-            
-            # Check if all players have guessed correctly
-            if len(game["guessed_correctly"]) == len(game["players"]):
-                await ctx.send("🏆 All players have guessed their actors correctly! The game is now over.")
-                del self.active_games[channel_id]
-                return
-            
-            # Move to the next player's turn
-            self._next_player_turn(game)
-            current_player = game["players"][game["turn_index"]]
-            
-            # Skip players who have already guessed correctly
-            while current_player.id in game["guessed_correctly"]:
-                self._next_player_turn(game)
-                current_player = game["players"][game["turn_index"]]
-            
-            await ctx.send(f"It's now {current_player.mention}'s turn!")
-        else:
-            await ctx.send(f"Sorry {ctx.author.mention}, that's not the actor assigned to you. Try asking more questions!")
-    
-    @actor_group.command(name="end")
-    async def end_game(self, ctx):
-        """End the current actor guessing game."""
-        channel_id = ctx.channel.id
-        
-        # Check if there's an active game in this channel
-        if channel_id not in self.active_games:
-            await ctx.send("There's no active game in this channel.")
-            return
-        
-        game = self.active_games[channel_id]
-        
-        # Check if the command user is the host or has manage messages permission
-        if ctx.author != game["host"] and not ctx.channel.permissions_for(ctx.author).manage_messages:
-            await ctx.send("Only the game host or moderators can end the game.")
-            return
-        
-        # Show the actor assignments if the game had started
-        if game["started"]:
-            message = "**Game ended! Actor assignments were:**\n"
-            for player in game["players"]:
-                actor = game["actor_assignments"][player.id]
-                guessed = "✅" if player.id in game["guessed_correctly"] else "❌"
-                message += f"{player.display_name}: {actor} {guessed}\n"
-            
-            await ctx.send(message)
-        else:
-            await ctx.send("Game ended without starting.")
-        
-        # Remove the game
-        del self.active_games[channel_id]
-    
-    @actor_group.command(name="status")
-    async def game_status(self, ctx):
-        """Show the current status of the actor guessing game."""
-        channel_id = ctx.channel.id
-        
-        # Check if there's an active game in this channel
-        if channel_id not in self.active_games:
-            await ctx.send("There's no active game in this channel.")
-            return
-        
-        game = self.active_games[channel_id]
-        
-        # Create an embed with the game status
+        # Send the question to the channel with the player's info
         embed = discord.Embed(
-            title="Actor Guessing Game Status",
+            title="❓ Question",
+            description=f"**{ctx.author.display_name}** asks: {question}",
             color=discord.Color.blue()
         )
         
-        embed.add_field(name="Host", value=game["host"].mention, inline=False)
-        embed.add_field(name="Category", value=game["category"].title() if game["category"] else "Not selected", inline=False)
+        # Add the player's actor as a field for others to see
+        embed.add_field(
+            name="Help them guess this actor:",
+            value=f"**{player.actor}**",
+            inline=False
+        )
         
-        player_list = ""
-        for i, player in enumerate(game["players"]):
-            status = ""
-            if game["started"]:
-                if player.id in game["guessed_correctly"]:
-                    status = " (Guessed correctly ✅)"
-                elif i == game["turn_index"]:
-                    status = " (Current turn 🎮)"
-            player_list += f"{player.mention}{status}\n"
-        
-        embed.add_field(name=f"Players ({len(game['players'])})", value=player_list, inline=False)
-        embed.add_field(name="Game Started", value="Yes" if game["started"] else "No", inline=False)
-        
-        if game["started"]:
-            correct_guesses = f"{len(game['guessed_correctly'])}/{len(game['players'])}"
-            embed.add_field(name="Correct Guesses", value=correct_guesses, inline=False)
+        embed.set_footer(text="Others can respond to help them guess!")
         
         await ctx.send(embed=embed)
+        logger.info(f"Player {ctx.author.id} asked a question in game in guild {guild_id}")
     
-    def _next_player_turn(self, game):
-        """Helper method to advance to the next player's turn."""
-        game["turn_index"] = (game["turn_index"] + 1) % len(game["players"])
+    @commands.command(name="guess")
+    async def guess_actor(self, ctx, *, actor_name=None):
+        """
+        Make a guess for your assigned actor.
+        
+        Usage: !guess Tom Hanks
+        """
+        guild_id = ctx.guild.id
+        
+        # Check if a game is running
+        if guild_id not in self.game_sessions:
+            await ctx.send("❌ No game is currently running.")
+            return
+        
+        session = self.game_sessions[guild_id]
+        
+        # Check if the game is in progress
+        if not session.is_in_progress:
+            await ctx.send("❌ The game hasn't started yet. Wait for the host to assign actors.")
+            return
+        
+        # Check if the user is in the game
+        player = session.get_player(ctx.author.id)
+        if player is None:
+            await ctx.send("❌ You're not in this game.")
+            return
+        
+        # Check if the player has already guessed correctly
+        if player.has_guessed_correctly:
+            await ctx.send("✅ You've already guessed your actor correctly!")
+            return
+        
+        # Check if a guess was provided
+        if not actor_name:
+            await ctx.send("❌ You need to provide a guess. Use `!guess <actor name>`")
+            return
+        
+        # Check if the player has used all their guesses
+        if player.guess_count >= config.GUESS_LIMIT and not player.has_guessed_correctly:
+            await ctx.send(f"❌ You've used all your {config.GUESS_LIMIT} guess attempts! Your actor was **{player.actor}**.")
+            return
+        
+        session.last_activity = time.time()
+        player.guess_count += 1
+        
+        # Check if the guess is correct (case-insensitive)
+        if actor_name.lower() == player.actor.lower():
+            player.has_guessed_correctly = True
+            
+            embed = discord.Embed(
+                title="🎉 Correct Guess!",
+                description=f"**{ctx.author.display_name}** correctly guessed their actor as **{player.actor}**!",
+                color=discord.Color.green()
+            )
+            
+            # Check if all players have guessed their actors
+            all_guessed = all(p.has_guessed_correctly for p in session.players)
+            if all_guessed:
+                embed.add_field(
+                    name="Game Complete!",
+                    value="All players have correctly guessed their actors. The game is now over!",
+                    inline=False
+                )
+                # End the game
+                del self.game_sessions[guild_id]
+            else:
+                remaining = sum(1 for p in session.players if not p.has_guessed_correctly)
+                embed.add_field(
+                    name="Status",
+                    value=f"{remaining} players still need to guess their actor.",
+                    inline=False
+                )
+            
+            await ctx.send(embed=embed)
+            logger.info(f"Player {ctx.author.id} correctly guessed their actor in guild {guild_id}")
+            
+        else:
+            # Incorrect guess
+            guesses_left = config.GUESS_LIMIT - player.guess_count
+            
+            embed = discord.Embed(
+                title="❌ Incorrect Guess",
+                description=f"**{ctx.author.display_name}**, that's not your actor!",
+                color=discord.Color.red()
+            )
+            
+            if guesses_left > 0:
+                embed.add_field(
+                    name="Attempts Remaining",
+                    value=f"You have {guesses_left} guess(es) left.",
+                    inline=False
+                )
+            else:
+                embed.add_field(
+                    name="Out of Guesses",
+                    value=f"You're out of guesses! Your actor was **{player.actor}**.",
+                    inline=False
+                )
+            
+            await ctx.send(embed=embed)
+            logger.info(f"Player {ctx.author.id} made an incorrect guess in guild {guild_id}")
+    
+    @commands.command(name="endgame")
+    async def end_game(self, ctx):
+        """End the current 'Guess the Actor' game (host only or admin)."""
+        guild_id = ctx.guild.id
+        
+        # Check if a game is running
+        if guild_id not in self.game_sessions:
+            await ctx.send("❌ No game is currently running.")
+            return
+        
+        session = self.game_sessions[guild_id]
+        
+        # Check if the command was issued by the host or by someone with admin permissions
+        if ctx.author.id != session.host_id and not ctx.author.guild_permissions.administrator:
+            await ctx.send("❌ Only the game host or an administrator can end the game.")
+            return
+        
+        # Build a summary of the game
+        embed = discord.Embed(
+            title="🎭 Game Ended",
+            description=f"The 'Guess the Actor' game has been ended by {ctx.author.mention}.",
+            color=discord.Color.orange()
+        )
+        
+        # List all players and their actors
+        players_summary = []
+        for player in session.players:
+            member = ctx.guild.get_member(player.id)
+            if member:
+                status = "✅ Guessed correctly" if player.has_guessed_correctly else "❌ Didn't guess"
+                players_summary.append(f"{member.mention}: **{player.actor}** - {status}")
+        
+        if players_summary:
+            embed.add_field(
+                name="Players & Actors",
+                value="\n".join(players_summary),
+                inline=False
+            )
+        
+        # End the game and remove from sessions
+        del self.game_sessions[guild_id]
+        
+        await ctx.send(embed=embed)
+        logger.info(f"Game ended in guild {guild_id} by user {ctx.author.id}")
+    
+    @commands.command(name="gamestatus")
+    async def game_status(self, ctx):
+        """Show the status of the current game."""
+        guild_id = ctx.guild.id
+        
+        # Check if a game is running
+        if guild_id not in self.game_sessions:
+            await ctx.send("❌ No game is currently running.")
+            return
+        
+        session = self.game_sessions[guild_id]
+        
+        # Create an embed with game status
+        embed = discord.Embed(
+            title="🎭 Game Status",
+            description=f"Category: **{session.category}**",
+            color=discord.Color.blue()
+        )
+        
+        # Add host information
+        host = ctx.guild.get_member(session.host_id)
+        embed.add_field(
+            name="Host",
+            value=host.mention if host else "Unknown",
+            inline=True
+        )
+        
+        # Add game phase
+        phase = "Assigning Actors" if not session.is_in_progress else "Guessing Phase"
+        embed.add_field(name="Phase", value=phase, inline=True)
+        
+        # List players and their status
+        if session.is_in_progress:
+            player_list = []
+            for player in session.players:
+                member = ctx.guild.get_member(player.id)
+                if member:
+                    status = "✅ Guessed correctly" if player.has_guessed_correctly else f"❓ ({config.GUESS_LIMIT - player.guess_count} guesses left)"
+                    player_list.append(f"{member.mention}: {status}")
+            
+            embed.add_field(
+                name="Players Status",
+                value="\n".join(player_list) or "No players",
+                inline=False
+            )
+        else:
+            # If game hasn't started, just list the players
+            player_mentions = [f"<@{player.id}>" for player in session.players]
+            embed.add_field(
+                name=f"Players ({len(session.players)})",
+                value="\n".join(player_mentions) or "No players",
+                inline=False
+            )
+        
+        await ctx.send(embed=embed)
 
 async def setup(bot):
     """Setup function to add the cog to the bot."""

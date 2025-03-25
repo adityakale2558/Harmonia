@@ -1,0 +1,240 @@
+{% extends "layout.html" %}
+
+{% block title %}Harmonia Discord Bot Dashboard{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-12 mb-4">
+        <div class="card border-0 shadow">
+            <div class="card-body">
+                <div class="row align-items-center">
+                    <div class="col-md-2 text-center">
+                        <div class="bot-avatar-container">
+                            {% if bot_status.connected %}
+                                <img src="https://cdn.discordapp.com/avatars/{{ bot_status.id }}/{{ bot_status.avatar }}.png" alt="{{ bot_status.name }}" class="bot-avatar mb-3" onerror="this.src='https://cdn.discordapp.com/embed/avatars/0.png';">
+                            {% else %}
+                                <img src="https://cdn.discordapp.com/embed/avatars/0.png" alt="Bot Avatar" class="bot-avatar mb-3">
+                            {% endif %}
+                        </div>
+                    </div>
+                    <div class="col-md-10">
+                        <h2 class="display-4">
+                            <span class="discord-color">{{ bot_status.name }}</span>
+                            {% if bot_status.connected %}
+                                <span class="badge bg-success ms-2">Online</span>
+                            {% else %}
+                                <span class="badge bg-danger ms-2">Offline</span>
+                            {% endif %}
+                        </h2>
+                        <p class="lead">A Discord bot for playing "Guess the Actor" games and streaming music from YouTube and Spotify.</p>
+                        {% if bot_status.connected %}
+                            <p class="text-muted">Connected to {{ bot_status.guild_count }} servers with {{ bot_status.user_count }} users.</p>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <!-- Stats cards -->
+    <div class="col-md-3 mb-4">
+        <div class="card border-0 shadow h-100">
+            <div class="card-body text-center">
+                <i class="fas fa-server fa-3x discord-color mb-3"></i>
+                <h5 class="card-title">Servers</h5>
+                <h2 class="display-4">{{ bot_status.guild_count }}</h2>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-3 mb-4">
+        <div class="card border-0 shadow h-100">
+            <div class="card-body text-center">
+                <i class="fas fa-users fa-3x discord-color mb-3"></i>
+                <h5 class="card-title">Users</h5>
+                <h2 class="display-4">{{ bot_status.user_count }}</h2>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-3 mb-4">
+        <div class="card border-0 shadow h-100">
+            <div class="card-body text-center">
+                <i class="fas fa-theater-masks fa-3x discord-color mb-3"></i>
+                <h5 class="card-title">Active Games</h5>
+                <h2 class="display-4">{{ bot_status.active_games }}</h2>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-3 mb-4">
+        <div class="card border-0 shadow h-100">
+            <div class="card-body text-center">
+                <i class="fas fa-music fa-3x discord-color mb-3"></i>
+                <h5 class="card-title">Music Sessions</h5>
+                <h2 class="display-4">{{ bot_status.active_music_sessions }}</h2>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% if bot_status.guilds %}
+<div class="row">
+    <div class="col-md-12 mb-4">
+        <div class="card border-0 shadow">
+            <div class="card-header bg-dark">
+                <h5 class="card-title mb-0">
+                    <i class="fas fa-server me-2"></i> 
+                    Recent Servers
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    {% for guild in bot_status.guilds[:4] %}
+                    <div class="col-md-3 mb-3">
+                        <div class="card h-100">
+                            <div class="card-body text-center">
+                                <img src="{{ guild.icon_url or 'https://cdn.discordapp.com/embed/avatars/0.png' }}" alt="{{ guild.name }}" class="server-icon mb-3">
+                                <h5 class="card-title">{{ guild.name }}</h5>
+                                <p class="text-muted">{{ guild.member_count }} members</p>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+                
+                {% if bot_status.guild_count > 4 %}
+                <div class="text-center mt-3">
+                    <a href="{{ url_for('guilds') }}" class="btn btn-outline-primary">
+                        <i class="fas fa-eye me-1"></i> View All Servers
+                    </a>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<div class="row">
+    <div class="col-md-6 mb-4">
+        <div class="card border-0 shadow h-100">
+            <div class="card-header bg-dark">
+                <h5 class="card-title mb-0">
+                    <i class="fas fa-theater-masks me-2"></i> 
+                    Actor Game Commands
+                </h5>
+            </div>
+            <div class="card-body">
+                <ul class="list-group list-group-flush">
+                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                        <div>
+                            <strong>!startgame [category]</strong>
+                            <p class="text-muted mb-0">Start a new "Guess the Actor" game</p>
+                        </div>
+                        <span class="badge bg-primary rounded-pill">Host</span>
+                    </li>
+                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                        <div>
+                            <strong>!join</strong>
+                            <p class="text-muted mb-0">Join an ongoing game</p>
+                        </div>
+                        <span class="badge bg-secondary rounded-pill">Player</span>
+                    </li>
+                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                        <div>
+                            <strong>!question [text]</strong>
+                            <p class="text-muted mb-0">Ask a question to help guess your actor</p>
+                        </div>
+                        <span class="badge bg-secondary rounded-pill">Player</span>
+                    </li>
+                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                        <div>
+                            <strong>!guess [actor name]</strong>
+                            <p class="text-muted mb-0">Make a guess for your assigned actor</p>
+                        </div>
+                        <span class="badge bg-secondary rounded-pill">Player</span>
+                    </li>
+                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                        <div>
+                            <strong>!endgame</strong>
+                            <p class="text-muted mb-0">End the current game</p>
+                        </div>
+                        <span class="badge bg-primary rounded-pill">Host</span>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-6 mb-4">
+        <div class="card border-0 shadow h-100">
+            <div class="card-header bg-dark">
+                <h5 class="card-title mb-0">
+                    <i class="fas fa-music me-2"></i> 
+                    Music Commands
+                </h5>
+            </div>
+            <div class="card-body">
+                <ul class="list-group list-group-flush">
+                    <li class="list-group-item">
+                        <strong>!joinvc</strong>
+                        <p class="text-muted mb-0">Join your voice channel</p>
+                    </li>
+                    <li class="list-group-item">
+                        <strong>!play [url/query]</strong>
+                        <p class="text-muted mb-0">Play a song from YouTube or Spotify</p>
+                    </li>
+                    <li class="list-group-item">
+                        <strong>!pause / !resume</strong>
+                        <p class="text-muted mb-0">Pause or resume playback</p>
+                    </li>
+                    <li class="list-group-item">
+                        <strong>!skip</strong>
+                        <p class="text-muted mb-0">Skip to the next song</p>
+                    </li>
+                    <li class="list-group-item">
+                        <strong>!queue</strong>
+                        <p class="text-muted mb-0">Show the current queue</p>
+                    </li>
+                    <li class="list-group-item">
+                        <strong>!lyrics [song name]</strong>
+                        <p class="text-muted mb-0">Display lyrics for a song</p>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // Refresh bot status every 15 seconds
+    setInterval(function() {
+        fetch('/api/bot-status')
+            .then(response => response.json())
+            .then(data => {
+                // Update status indicators
+                if (data.connected) {
+                    document.querySelector('.badge').classList.remove('bg-danger');
+                    document.querySelector('.badge').classList.add('bg-success');
+                    document.querySelector('.badge').textContent = 'Online';
+                } else {
+                    document.querySelector('.badge').classList.remove('bg-success');
+                    document.querySelector('.badge').classList.add('bg-danger');
+                    document.querySelector('.badge').textContent = 'Offline';
+                }
+                
+                // Update stats
+                document.querySelectorAll('.display-4')[1].textContent = data.guild_count;
+                document.querySelectorAll('.display-4')[2].textContent = data.user_count;
+                document.querySelectorAll('.display-4')[3].textContent = data.active_games;
+                document.querySelectorAll('.display-4')[4].textContent = data.active_music_sessions;
+            })
+            .catch(error => console.error('Error fetching bot status:', error));
+    }, 15000);
+</script>
+{% endblock %}

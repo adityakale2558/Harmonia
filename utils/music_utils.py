@@ -1,168 +1,129 @@
-import discord
-import aiohttp
-import logging
-import re
-from typing import Dict, List, Tuple, Optional
-from config import Config
+from typing import List, Optional
+import time
 
-logger = logging.getLogger("discord_bot.music_utils")
+class Song:
+    """Class representing a song in the music queue."""
+    
+    def __init__(self, title: str, url: Optional[str], duration: Optional[int] = None,
+                 webpage_url: Optional[str] = None, thumbnail: Optional[str] = None,
+                 uploader: str = "Unknown", is_spotify: bool = False, search_query: Optional[str] = None):
+        self.title = title  # Song title
+        self.url = url  # Direct audio URL for playback
+        self.duration = duration  # Duration in seconds
+        self.webpage_url = webpage_url  # URL of the webpage (e.g., YouTube video)
+        self.thumbnail = thumbnail  # URL to the song thumbnail
+        self.uploader = uploader  # Name of the uploader (e.g., YouTube channel)
+        self.is_spotify = is_spotify  # Whether this song is from Spotify
+        self.search_query = search_query  # Search query for Spotify songs to find on YouTube
+        self.added_at = time.time()  # Time when the song was added to the queue
+    
+    def __str__(self):
+        return f"Song({self.title}, duration={self.duration}s, is_spotify={self.is_spotify})"
 
-async def get_lyrics(song_name: str) -> Optional[str]:
-    """
-    Fetch lyrics for a song from the lyrics.ovh API.
+class MusicQueue:
+    """Class for managing the music queue."""
     
-    Args:
-        song_name: The name of the song to find lyrics for
+    def __init__(self):
+        self.songs: List[Song] = []  # List of songs in the queue
+        self.current_index = 0  # Index of the current song
+        self.volume = 0.5  # Volume level (0.0 to 1.0)
+        self.loop_mode = False  # Whether to loop the queue
     
-    Returns:
-        The lyrics text if found, None otherwise
-    """
-    # Clean up the song name
-    # Remove featuring artists, official video, etc.
-    cleaned_name = re.sub(r'\(feat\..*?\)|\(ft\..*?\)|\(official.*?\)|\(lyrics.*?\)|\(audio.*?\)|HD|HQ|[0-9]{4}|official|video|audio|lyrics', '', song_name, flags=re.IGNORECASE)
-    cleaned_name = cleaned_name.strip()
+    def add(self, song: Song) -> None:
+        """Add a song to the queue."""
+        self.songs.append(song)
     
-    # Try to split artist and title
-    parts = cleaned_name.split(' - ', 1)
-    if len(parts) == 2:
-        artist, title = parts
-    else:
-        # Try to make a best guess at artist/title split
-        words = cleaned_name.split()
-        if len(words) <= 3:
-            # If 3 or fewer words, use the whole thing as title
-            artist = ""
-            title = cleaned_name
-        else:
-            # Use first word as artist, rest as title (not ideal but a fallback)
-            artist = words[0]
-            title = ' '.join(words[1:])
+    def clear(self) -> None:
+        """Clear the queue."""
+        self.songs = []
+        self.current_index = 0
     
-    # Remove any remaining parentheses
-    title = re.sub(r'\(.*?\)|\[.*?\]', '', title).strip()
-    artist = re.sub(r'\(.*?\)|\[.*?\]', '', artist).strip()
+    def is_empty(self) -> bool:
+        """Check if the queue is empty."""
+        return len(self.songs) == 0
     
-    logger.info(f"Searching for lyrics: Artist='{artist}', Title='{title}'")
-    
-    # Try with artist and title if we have both
-    if artist and title:
-        lyrics = await _fetch_lyrics(artist, title)
-        if lyrics:
-            return lyrics
-    
-    # Try with just the title
-    if title:
-        lyrics = await _fetch_lyrics("", title)
-        if lyrics:
-            return lyrics
-    
-    # Try with the original query as a last resort
-    return await _fetch_lyrics("", cleaned_name)
-
-async def _fetch_lyrics(artist: str, title: str) -> Optional[str]:
-    """
-    Make a request to the lyrics API.
-    
-    Args:
-        artist: The artist name (can be empty)
-        title: The song title
-    
-    Returns:
-        The lyrics text if found, None otherwise
-    """
-    # If artist is empty, use the title as the full query
-    if not artist:
-        endpoint = f"{Config.LYRICS_API_URL}/{title}"
-    else:
-        endpoint = f"{Config.LYRICS_API_URL}/{artist}/{title}"
-    
-    try:
-        async with aiohttp.ClientSession() as session:
-            async with session.get(endpoint) as response:
-                if response.status == 200:
-                    data = await response.json()
-                    return data.get('lyrics')
-                else:
-                    logger.warning(f"Failed to fetch lyrics: {response.status}")
-                    return None
-    except Exception as e:
-        logger.error(f"Error fetching lyrics: {e}")
+    @property
+    def current_song(self) -> Optional[Song]:
+        """Get the current song."""
+        if 0 <= self.current_index < len(self.songs):
+            return self.songs[self.current_index]
         return None
-
-def create_queue_embed(queue: List[Dict], current_index: int, loop: bool) -> discord.Embed:
-    """
-    Create an embed to display the music queue.
     
-    Args:
-        queue: The list of tracks in the queue
-        current_index: The index of the current track
-        loop: Whether loop mode is enabled
-    
-    Returns:
-        Discord embed with the queue information
-    """
-    embed = discord.Embed(
-        title="🎵 Music Queue",
-        color=discord.Color.blue()
-    )
-    
-    # Add current track
-    if current_index < len(queue):
-        current = queue[current_index]
-        embed.add_field(
-            name="Now Playing",
-            value=f"**{current['title']}** [{format_duration(current['duration'])}] - Requested by {current['requester'].mention}",
-            inline=False
-        )
-    
-    # Add upcoming tracks (maximum 10)
-    if current_index + 1 < len(queue):
-        upcoming = queue[current_index + 1:current_index + 11]
-        upcoming_text = ""
+    def get_next_song(self) -> Optional[Song]:
+        """Get the next song in the queue."""
+        if self.is_empty():
+            return None
         
-        for i, track in enumerate(upcoming):
-            upcoming_text += f"{i + 1}. **{track['title']}** [{format_duration(track['duration'])}] - {track['requester'].mention}\n"
+        # Return the current song and increment the index
+        song = self.current_song
         
-        embed.add_field(
-            name="Up Next",
-            value=upcoming_text if upcoming_text else "No upcoming tracks",
-            inline=False
-        )
+        # Increment the index for the next song
+        if self.loop_mode and self.current_index == len(self.songs) - 1:
+            # If looping and at the end, go back to the beginning
+            self.current_index = 0
+        else:
+            # Otherwise, move to the next song
+            self.current_index = min(self.current_index + 1, len(self.songs) - 1)
         
-        # If there are more tracks than what's displayed
-        remaining = len(queue) - current_index - len(upcoming) - 1
-        if remaining > 0:
-            embed.add_field(
-                name="And More",
-                value=f"{remaining} more tracks in queue",
-                inline=False
-            )
+        return song
     
-    # Add queue info
-    total_duration = sum(track['duration'] for track in queue)
-    embed.add_field(name="Total Tracks", value=len(queue), inline=True)
-    embed.add_field(name="Total Duration", value=format_duration(total_duration), inline=True)
-    embed.add_field(name="Loop Mode", value="Enabled" if loop else "Disabled", inline=True)
+    def remove(self, index: int) -> Optional[Song]:
+        """Remove a song from the queue by index."""
+        if 0 <= index < len(self.songs):
+            song = self.songs.pop(index)
+            
+            # Adjust current_index if necessary
+            if index < self.current_index:
+                self.current_index -= 1
+            
+            return song
+        return None
     
-    return embed
-
-def format_duration(seconds: int) -> str:
-    """
-    Format a duration in seconds to a string (MM:SS or HH:MM:SS).
+    def shuffle(self) -> None:
+        """Shuffle the queue (except the current song)."""
+        import random
+        
+        # Don't shuffle if queue is empty or has only one song
+        if len(self.songs) <= 1:
+            return
+        
+        # Keep the current song, shuffle the rest
+        current = self.current_song
+        
+        # Remove current song
+        if current:
+            self.songs.pop(self.current_index)
+        
+        # Shuffle remaining songs
+        random.shuffle(self.songs)
+        
+        # Put current song back at the beginning
+        if current:
+            self.songs.insert(0, current)
+            self.current_index = 0
     
-    Args:
-        seconds: The duration in seconds
+    def next_song(self) -> Optional[Song]:
+        """Skip to the next song in the queue."""
+        if self.is_empty() or self.current_index >= len(self.songs) - 1:
+            if self.loop_mode and not self.is_empty():
+                # If looping, go back to the beginning
+                self.current_index = 0
+                return self.current_song
+            return None
+        
+        # Move to the next song
+        self.current_index += 1
+        return self.current_song
     
-    Returns:
-        Formatted duration string
-    """
-    if not seconds or seconds <= 0:
-        return "00:00"
+    def previous_song(self) -> Optional[Song]:
+        """Go back to the previous song in the queue."""
+        if self.is_empty() or self.current_index <= 0:
+            return None
+        
+        # Move to the previous song
+        self.current_index -= 1
+        return self.current_song
     
-    minutes, seconds = divmod(seconds, 60)
-    hours, minutes = divmod(minutes, 60)
-    
-    if hours > 0:
-        return f"{hours:02d}:{minutes:02d}:{seconds:02d}"
-    else:
-        return f"{minutes:02d}:{seconds:02d}"
+    def __len__(self) -> int:
+        """Get the number of songs in the queue."""
+        return len(self.songs)

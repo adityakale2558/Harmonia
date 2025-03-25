@@ -1,25 +1,21 @@
 import os
 
-class Config:
-    """Configuration settings for the Discord bot."""
-    
-    # Bot command prefix
-    PREFIX = os.environ.get("COMMAND_PREFIX", "!")
-    
-    # Default volume for music playback (0-100)
-    DEFAULT_VOLUME = 50
-    
-    # Maximum number of songs in the queue
-    MAX_QUEUE_SIZE = 100
-    
-    # Actor game settings
-    GAME_TIMEOUT = 300  # 5 minutes in seconds
-    MAX_PLAYERS = 10
-    MIN_PLAYERS = 2
-    
-    # API endpoints and URLs
-    LYRICS_API_URL = "https://api.lyrics.ovh/v1"
-    
-    # Spotify API credentials
-    SPOTIFY_CLIENT_ID = os.environ.get("SPOTIFY_CLIENT_ID", "")
-    SPOTIFY_CLIENT_SECRET = os.environ.get("SPOTIFY_CLIENT_SECRET", "")
+# Bot configuration
+PREFIX = os.getenv("COMMAND_PREFIX", "!")
+
+# Game settings
+MIN_PLAYERS = 2
+MAX_PLAYERS = 10
+GAME_TIMEOUT = 300  # 5 minutes of inactivity
+GUESS_LIMIT = 3     # Number of guess attempts per player
+
+# Actor game categories
+CATEGORIES = ["Hollywood", "Bollywood"]
+
+# Music bot settings
+DEFAULT_VOLUME = 0.5  # 50%
+MAX_QUEUE_SIZE = 100
+YOUTUBE_API_KEY = os.getenv("YOUTUBE_API_KEY", "")
+SPOTIFY_CLIENT_ID = os.getenv("SPOTIFY_CLIENT_ID", "")
+SPOTIFY_CLIENT_SECRET = os.getenv("SPOTIFY_CLIENT_SECRET", "")
+GENIUS_API_KEY = os.getenv("GENIUS_API_KEY", "")
