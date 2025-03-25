@@ -14,7 +14,7 @@ from utils.game_manager import GameSession, Player
 logger = logging.getLogger('discord_bot.actor_game')
 
 class ActorGame(commands.Cog):
-    """Cog that implements the 'Guess the Actor' game functionality."""
+    """Cog that implements the 'Guess It' game functionality."""
     
     def __init__(self, bot):
         self.bot = bot
@@ -76,9 +76,9 @@ class ActorGame(commands.Cog):
     @commands.command(name="startgame")
     async def start_game(self, ctx, category=None):
         """
-        Start a new 'Guess the Actor' game.
+        Start a new 'Guess It' game.
         
-        Usage: !startgame [category]
+        Usage: =startgame [category]
         Available categories: Hollywood, Bollywood, Apps, Food
         """
         guild_id = ctx.guild.id
@@ -118,7 +118,7 @@ class ActorGame(commands.Cog):
         
         # Send game start message
         embed = discord.Embed(
-            title="🎭 Guess the Actor Game",
+            title="🎭 Guess It Game",
             description=f"Game started with category: **{category}**\n\n"
                        f"Other players can join with `!join`\n"
                        f"When ready, the host can use `!assign` to assign actors to players.",
