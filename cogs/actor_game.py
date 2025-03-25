@@ -339,23 +339,36 @@ class ActorGame(commands.Cog):
         
         session.last_activity = time.time()
         
-        # Send the question to the channel with the player's info
-        embed = discord.Embed(
+        # Send the public question to the channel without the actor name
+        public_embed = discord.Embed(
             title="❓ Question",
             description=f"**{ctx.author.display_name}** asks: {question}",
             color=discord.Color.blue()
         )
         
+        public_embed.set_footer(text="Others can respond to help them guess!")
+        
+        await ctx.send(embed=public_embed)
+        
+        # Send an ephemeral message (only visible to the asker) with the actor name
+        ephemeral_embed = discord.Embed(
+            title="❓ Your Question",
+            description=f"You asked: {question}",
+            color=discord.Color.blue()
+        )
+        
         # Add the player's actor as a field for others to see
-        embed.add_field(
+        ephemeral_embed.add_field(
             name="Help them guess this actor:",
             value=f"**{player.actor}**",
             inline=False
         )
         
-        embed.set_footer(text="Others can respond to help them guess!")
+        ephemeral_embed.set_footer(text="Only you can see this message. Others will see your question without the actor name.")
         
-        await ctx.send(embed=embed)
+        # Send ephemeral message that only the command author can see
+        await ctx.send(embed=ephemeral_embed, ephemeral=True)
+        
         logger.info(f"Player {ctx.author.id} asked a question in game in guild {guild_id}")
     
     @commands.command(name="guess")
