@@ -353,24 +353,6 @@ class ActorGame(commands.Cog):
         
         session.last_activity = time.time()
         
-        # Send the public question to the channel without the actor name
-        public_embed = discord.Embed(
-            title="❓ Question",
-            description=f"**{ctx.author.display_name}** asks: {question}",
-            color=discord.Color.blue()
-        )
-        
-        public_embed.set_footer(text="Others can respond to help them guess!")
-        
-        await ctx.send(embed=public_embed)
-        
-        # Send a direct message to the player with their assigned item
-        dm_embed = discord.Embed(
-            title="❓ Your Question",
-            description=f"You asked: {question}",
-            color=discord.Color.blue()
-        )
-        
         # Get the correct term based on the category
         item_type = "actor"
         if session.category.lower() == "apps":
@@ -378,21 +360,73 @@ class ActorGame(commands.Cog):
         elif session.category.lower() == "food":
             item_type = "food item"
         
-        # Add the player's item as a field
-        dm_embed.add_field(
-            name=f"Help them guess this {item_type}:",
-            value=f"**{player.actor}**",
-            inline=False
+        # Send the public question to the channel without the actor name
+        public_embed = discord.Embed(
+            title="❓ Question",
+            description=f"**{ctx.author.display_name}** asks: {question}",
+            color=discord.Color.blue()
         )
         
-        dm_embed.set_footer(text="Only you can see this message. Others will see your question without the item name.")
+        public_embed.set_footer(text=f"Others can respond to help them guess their {item_type}!")
         
-        # Always use DM since ephemeral messages aren't working properly
-        try:
-            await ctx.author.send(embed=dm_embed)
-        except discord.Forbidden:
-            # If DMs are disabled, send a warning
-            await ctx.send(f"⚠️ {ctx.author.mention}, I couldn't send you a DM with the information. Please enable DMs from server members.")
+        # First send the public message to the channel
+        question_msg = await ctx.send(embed=public_embed)
+        
+        # Now send a private DM to each OTHER player with the asker's item
+        # This way everyone except the asker knows what that person needs to guess
+        confirmation_sent = False
+        
+        for other_player in session.players:
+            # Skip the player who asked the question
+            if other_player.id == ctx.author.id:
+                continue
+                
+            # Get the Discord member object
+            member = ctx.guild.get_member(other_player.id)
+            if not member:
+                continue
+                
+            # Create the response embed for others
+            response_embed = discord.Embed(
+                title="❓ Help With Question",
+                description=f"**{ctx.author.display_name}** asked: {question}",
+                color=discord.Color.purple()
+            )
+            
+            response_embed.add_field(
+                name=f"Help them guess this {item_type}:",
+                value=f"**{player.actor}**",
+                inline=False
+            )
+            
+            response_embed.add_field(
+                name="How to help:",
+                value="Reply to their question in the channel to give them clues without revealing the answer.",
+                inline=False
+            )
+            
+            response_embed.set_footer(text=f"Only you and others (not the asker) can see this {item_type} name")
+            
+            # Send the DM to the other player
+            try:
+                await member.send(embed=response_embed)
+                confirmation_sent = True
+            except discord.Forbidden:
+                # If DMs are disabled, warn in the channel
+                await ctx.send(f"⚠️ {member.mention} has DMs disabled. Please enable DMs from server members to receive secret info.")
+        
+        # Send a confirmation to the asker that their question has been sent
+        if confirmation_sent:
+            try:
+                confirmation_embed = discord.Embed(
+                    title="✅ Question Sent",
+                    description=f"Your question has been sent and other players have been notified about your {item_type} via DM.",
+                    color=discord.Color.green()
+                )
+                await ctx.author.send(embed=confirmation_embed)
+            except discord.Forbidden:
+                # If asker has DMs disabled, don't worry about it
+                pass
         
         logger.info(f"Player {ctx.author.id} asked a question in game in guild {guild_id}")
     
