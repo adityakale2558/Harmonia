@@ -258,21 +258,28 @@ class ActorGame(commands.Cog):
                         others_actors.append(f"{other_player.name}: **{other_player.actor}**")
                 
                 try:
+                    # Get the correct term based on the category
+                    item_type = "actor"
+                    if session.category.lower() == "apps":
+                        item_type = "app"
+                    elif session.category.lower() == "food":
+                        item_type = "food item"
+                    
                     # Send DM to player
                     embed = discord.Embed(
-                        title="🎭 Your Actor Assignment",
+                        title=f"🎭 Your {item_type.capitalize()} Assignment",
                         description=(
                             f"Game in server: **{ctx.guild.name}**\n"
                             f"Category: **{session.category}**\n\n"
-                            f"You need to guess your actor by asking questions!\n"
+                            f"You need to guess your {item_type} by asking questions!\n"
                             f"Use `=question <your question>` in the game channel to ask questions.\n"
-                            f"When ready to guess, use `=guess <actor name>`."
+                            f"When ready to guess, use `=guess <{item_type} name>`."
                         ),
                         color=discord.Color.gold()
                     )
                     
                     embed.add_field(
-                        name="Other Players' Actors",
+                        name=f"Other Players' {item_type.capitalize()}s",
                         value="\n".join(others_actors) or "No other players",
                         inline=False
                     )
@@ -282,16 +289,23 @@ class ActorGame(commands.Cog):
                     # If we can't DM the user
                     await ctx.send(f"⚠️ Couldn't send a DM to {member.mention}. Please enable DMs from server members.")
         
+        # Get the correct term based on the category
+        item_type = "actor"
+        if session.category.lower() == "apps":
+            item_type = "app"
+        elif session.category.lower() == "food":
+            item_type = "food item"
+        
         # Send confirmation in the game channel
         embed = discord.Embed(
             title="🎭 Game Started!",
             description=(
-                f"Actors have been assigned to all players via DM!\n\n"
+                f"{item_type.capitalize()}s have been assigned to all players via DM!\n\n"
                 f"**How to play:**\n"
-                f"- You know everyone's actor except your own\n"
+                f"- You know everyone's {item_type} except your own\n"
                 f"- Ask questions with `=question <your question>`\n"
                 f"- Others will answer to help you guess\n"
-                f"- When ready, guess with `=guess <actor name>`\n"
+                f"- When ready, guess with `=guess <{item_type} name>`\n"
                 f"- You have {config.GUESS_LIMIT} guess attempts"
             ),
             color=discord.Color.green()
@@ -350,43 +364,45 @@ class ActorGame(commands.Cog):
         
         await ctx.send(embed=public_embed)
         
-        # Send an ephemeral message (only visible to the asker) with the actor name
-        ephemeral_embed = discord.Embed(
+        # Send a direct message to the player with their assigned item
+        dm_embed = discord.Embed(
             title="❓ Your Question",
             description=f"You asked: {question}",
             color=discord.Color.blue()
         )
         
-        # Add the player's actor as a field for others to see
-        ephemeral_embed.add_field(
-            name="Help them guess this actor:",
+        # Get the correct term based on the category
+        item_type = "actor"
+        if session.category.lower() == "apps":
+            item_type = "app"
+        elif session.category.lower() == "food":
+            item_type = "food item"
+        
+        # Add the player's item as a field
+        dm_embed.add_field(
+            name=f"Help them guess this {item_type}:",
             value=f"**{player.actor}**",
             inline=False
         )
         
-        ephemeral_embed.set_footer(text="Only you can see this message. Others will see your question without the actor name.")
+        dm_embed.set_footer(text="Only you can see this message. Others will see your question without the item name.")
         
-        # Send ephemeral message that only the command author can see
+        # Always use DM since ephemeral messages aren't working properly
         try:
-            # For newer versions of discord.py that support ephemeral messages
-            await ctx.send(embed=ephemeral_embed, ephemeral=True)
-        except TypeError:
-            # For older versions where ephemeral is not supported directly in ctx.send
-            # Use a private DM instead
-            try:
-                await ctx.author.send(embed=ephemeral_embed)
-            except discord.Forbidden:
-                # If DMs are disabled
-                await ctx.send("⚠️ I couldn't send you a DM with your actor information. Please enable DMs from server members.")
+            await ctx.author.send(embed=dm_embed)
+        except discord.Forbidden:
+            # If DMs are disabled, send a warning
+            await ctx.send(f"⚠️ {ctx.author.mention}, I couldn't send you a DM with the information. Please enable DMs from server members.")
         
         logger.info(f"Player {ctx.author.id} asked a question in game in guild {guild_id}")
     
     @commands.command(name="guess")
     async def guess_actor(self, ctx, *, actor_name=None):
         """
-        Make a guess for your assigned actor.
+        Make a guess for your assigned item.
         
-        Usage: =guess Tom Hanks
+        Usage: =guess <name>
+        Examples: =guess Tom Hanks, =guess Facebook, =guess Pizza
         """
         guild_id = ctx.guild.id
         
@@ -397,9 +413,16 @@ class ActorGame(commands.Cog):
         
         session = self.game_sessions[guild_id]
         
+        # Get the correct term based on the category
+        item_type = "actor"
+        if session.category.lower() == "apps":
+            item_type = "app"
+        elif session.category.lower() == "food":
+            item_type = "food item"
+        
         # Check if the game is in progress
         if not session.is_in_progress:
-            await ctx.send("❌ The game hasn't started yet. Wait for the host to assign actors.")
+            await ctx.send(f"❌ The game hasn't started yet. Wait for the host to assign {item_type}s.")
             return
         
         # Check if the user is in the game
@@ -410,17 +433,17 @@ class ActorGame(commands.Cog):
         
         # Check if the player has already guessed correctly
         if player.has_guessed_correctly:
-            await ctx.send("✅ You've already guessed your actor correctly!")
+            await ctx.send(f"✅ You've already guessed your {item_type} correctly!")
             return
         
         # Check if a guess was provided
         if not actor_name:
-            await ctx.send("❌ You need to provide a guess. Use `=guess <actor name>`")
+            await ctx.send(f"❌ You need to provide a guess. Use `=guess <{item_type} name>`")
             return
         
         # Check if the player has used all their guesses
         if player.guess_count >= config.GUESS_LIMIT and not player.has_guessed_correctly:
-            await ctx.send(f"❌ You've used all your {config.GUESS_LIMIT} guess attempts! Your actor was **{player.actor}**.")
+            await ctx.send(f"❌ You've used all your {config.GUESS_LIMIT} guess attempts! Your {item_type} was **{player.actor}**.")
             return
         
         session.last_activity = time.time()
@@ -432,16 +455,16 @@ class ActorGame(commands.Cog):
             
             embed = discord.Embed(
                 title="🎉 Correct Guess!",
-                description=f"**{ctx.author.display_name}** correctly guessed their actor as **{player.actor}**!",
+                description=f"**{ctx.author.display_name}** correctly guessed their {item_type} as **{player.actor}**!",
                 color=discord.Color.green()
             )
             
-            # Check if all players have guessed their actors
+            # Check if all players have guessed their items
             all_guessed = all(p.has_guessed_correctly for p in session.players)
             if all_guessed:
                 embed.add_field(
                     name="Game Complete!",
-                    value="All players have correctly guessed their actors. The game is now over!",
+                    value=f"All players have correctly guessed their {item_type}s. The game is now over!",
                     inline=False
                 )
                 # End the game
@@ -450,12 +473,12 @@ class ActorGame(commands.Cog):
                 remaining = sum(1 for p in session.players if not p.has_guessed_correctly)
                 embed.add_field(
                     name="Status",
-                    value=f"{remaining} players still need to guess their actor.",
+                    value=f"{remaining} players still need to guess their {item_type}.",
                     inline=False
                 )
             
             await ctx.send(embed=embed)
-            logger.info(f"Player {ctx.author.id} correctly guessed their actor in guild {guild_id}")
+            logger.info(f"Player {ctx.author.id} correctly guessed their {item_type} in guild {guild_id}")
             
         else:
             # Incorrect guess
@@ -463,7 +486,7 @@ class ActorGame(commands.Cog):
             
             embed = discord.Embed(
                 title="❌ Incorrect Guess",
-                description=f"**{ctx.author.display_name}**, that's not your actor!",
+                description=f"**{ctx.author.display_name}**, that's not your {item_type}!",
                 color=discord.Color.red()
             )
             
@@ -476,7 +499,7 @@ class ActorGame(commands.Cog):
             else:
                 embed.add_field(
                     name="Out of Guesses",
-                    value=f"You're out of guesses! Your actor was **{player.actor}**.",
+                    value=f"You're out of guesses! Your {item_type} was **{player.actor}**.",
                     inline=False
                 )
             
@@ -500,6 +523,13 @@ class ActorGame(commands.Cog):
             await ctx.send("❌ Only the game host or an administrator can end the game.")
             return
         
+        # Get the correct term based on the category
+        item_type = "actor"
+        if session.category.lower() == "apps":
+            item_type = "app"
+        elif session.category.lower() == "food":
+            item_type = "food item"
+        
         # Build a summary of the game
         embed = discord.Embed(
             title="🎭 Game Ended",
@@ -507,7 +537,7 @@ class ActorGame(commands.Cog):
             color=discord.Color.orange()
         )
         
-        # List all players and their actors
+        # List all players and their items
         players_summary = []
         for player in session.players:
             member = ctx.guild.get_member(player.id)
@@ -517,7 +547,7 @@ class ActorGame(commands.Cog):
         
         if players_summary:
             embed.add_field(
-                name="Players & Actors",
+                name=f"Players & {item_type.capitalize()}s",
                 value="\n".join(players_summary),
                 inline=False
             )
@@ -540,6 +570,13 @@ class ActorGame(commands.Cog):
         
         session = self.game_sessions[guild_id]
         
+        # Get the correct term based on the category
+        item_type = "actor"
+        if session.category.lower() == "apps":
+            item_type = "app"
+        elif session.category.lower() == "food":
+            item_type = "food item"
+            
         # Create an embed with game status
         embed = discord.Embed(
             title="🎭 Game Status",
@@ -556,7 +593,7 @@ class ActorGame(commands.Cog):
         )
         
         # Add game phase
-        phase = "Assigning Actors" if not session.is_in_progress else "Guessing Phase"
+        phase = f"Assigning {item_type.capitalize()}s" if not session.is_in_progress else "Guessing Phase"
         embed.add_field(name="Phase", value=phase, inline=True)
         
         # List players and their status
