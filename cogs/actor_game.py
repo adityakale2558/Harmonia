@@ -274,7 +274,7 @@ class ActorGame(commands.Cog):
                             f"Game in server: **{ctx.guild.name}**\n"
                             f"Category: **{session.category}**\n\n"
                             f"You need to guess your {item_type} by asking questions!\n"
-                            f"Use `=question <your question>` in the game channel to ask questions.\n"
+                            f"Just chat normally in the channel to ask questions.\n"
                             f"When ready to guess, use `=guess <{item_type} name>`."
                         ),
                         color=discord.Color.gold()
