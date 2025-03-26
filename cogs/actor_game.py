@@ -80,6 +80,8 @@ class ActorGame(commands.Cog):
         
         Usage: =startgame [category]
         Available categories: Hollywood, Bollywood, Apps, Food
+        
+        Once started, players can ask questions directly in chat or use the =question command.
         """
         guild_id = ctx.guild.id
         
@@ -133,7 +135,7 @@ class ActorGame(commands.Cog):
             "1. Join the game with `=join`\n"
             "2. The host will assign items to everyone with `=assign`\n"
             "3. You'll see everyone's item except your own\n"
-            "4. Ask questions to figure out your item using `=question <your question>`\n"
+            "4. Ask questions to figure out your item (just chat normally in the channel!)\n"
             "5. When you're ready to guess, use `=guess <item name>`"
         ), inline=False)
         
@@ -303,7 +305,8 @@ class ActorGame(commands.Cog):
                 f"{item_type.capitalize()}s have been assigned to all players via DM!\n\n"
                 f"**How to play:**\n"
                 f"- You know everyone's {item_type} except your own\n"
-                f"- Ask questions with `=question <your question>`\n"
+                f"- Ask questions by just chatting normally in the channel\n"
+                f"- You can also use `=question <your question>` for formal questions\n"
                 f"- Others will answer to help you guess\n"
                 f"- When ready, guess with `=guess <{item_type} name>`\n"
                 f"- You have {config.GUESS_LIMIT} guess attempts"
