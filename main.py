@@ -2,6 +2,7 @@ import os
 import logging
 import discord
 import asyncio
+import time
 from discord.ext import commands
 import config
 from threading import Thread
@@ -266,6 +267,28 @@ if __name__ == "__main__":
         logger.critical("No Discord token found! Set the DISCORD_TOKEN environment variable.")
         exit(1)
     
-    # Run the bot
-    logger.info("Starting Discord bot - Guess It mode")
-    bot.run(token)
+    # Add error handling and automatic restart
+    while True:
+        try:
+            # Run the bot
+            logger.info("Starting Discord bot - Guess It mode")
+            bot.run(token)
+        except discord.errors.HTTPException as e:
+            if e.status == 429:  # Rate limited
+                logger.warning(f"Rate limited. Retrying in 30 seconds... {str(e)}")
+                time.sleep(30)
+                continue
+            else:
+                logger.error(f"HTTP Exception: {str(e)}")
+                time.sleep(5)
+                continue
+        except discord.errors.ConnectionClosed:
+            # Connection closed, try to reconnect
+            logger.warning("Connection closed. Reconnecting...")
+            time.sleep(5)
+            continue
+        except Exception as e:
+            # General error, log and try again
+            logger.error(f"Unexpected error: {str(e)}")
+            time.sleep(10)
+            continue
